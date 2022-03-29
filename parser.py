@@ -1,5 +1,4 @@
 from ply import yacc
-
 from lexer import tokens, Lexer
 
 # class Node:
@@ -12,7 +11,7 @@ from lexer import tokens, Lexer
 #         self.leaf = leaf
 
 class Parser(object):
-
+    ε = 1e-8
     tokens = tokens
     # Parsing rules
     precedence = (
@@ -28,66 +27,47 @@ class Parser(object):
         self = super(Parser, cls).__new__(cls, **kwargs)
         self.yacc = yacc.yacc(module=self,  tabmodule="attrgram_parser_tab", **kwargs)
         return self.yacc
+    
+    def p_expression_plus(self, p):
+        'expression : expression PLUS term'
+        p[0] = f"{p[1]}+{p[3]}"
+    
+    def p_expression_minus(self, p):
+        'expression : expression MINUS term'
+        p[0] = f"{p[1]}-{p[3]}"
+    
+    def p_expression_term(self, p):
+        'expression : term'
+        p[0] = p[1]
+    
+    def p_term_times(self, p):
+        'term : term TIMES factor'
+        p[0] = f"{p[1]}*{p[3]}"
+    
+    def p_term_div(self, p):
+        'term : term DIVIDE factor'
+        p[0] = f"{p[1]}/({p[3]}+{self.ε})"
+    
+    def p_term_factor(self, p):
+        'term : factor'
+        p[0] = p[1]
+    
+    def p_factor_num(self, p):
+        '''factor : NUMBER 
+                | XINP'''
+        p[0] = p[1]
+    
+    def p_factor_expr(self, p):
+        'factor : LPAREN expression RPAREN'
+        p[0] = p[2]
+    
+    # Error rule for syntax errors
+    def p_error(self, p):
+        print("Syntax error in input!")
 
-
-    # def p_statement_assign(self, t):
-    #     'statement : NAME EQUALS expression'
-    #     self.names[t[1]] = t[3]
-
-    # def p_statement_expr(self, t):
-    #     'statement : expression'
-    #     print(t[1])
-
-    def p_expression_binop(self, t):
-        '''expression : expression PLUS expression
-                    | expression MINUS expression
-                    | expression TIMES expression
-                    | expression DIVIDE expression'''
-        if t[2] == '+'  : t[0] = t[1] + t[3]
-        elif t[2] == '-': t[0] = t[1] - t[3]
-        elif t[2] == '*': t[0] = t[1] * t[3]
-        elif t[2] == '/': t[0] = t[1] / t[3]
-            # if t[3] == 0:
-            #     print("parse tree not in grammar")
-            # else: 
-            #     t[0] = t[1] / t[3]
-        # t[0] = Node("binop", [t[1],t[3]], t[2])
-
-    # def p_expression_uminus(self, t):
-    #     # 'expression : MINUS expression %prec UMINUS'
-        
-    #     t[0] = -t[2]
-    #     # t[0] = Node("uminus", [t[2]], "-")
-
-    def p_expression_group(self, t):
-        'expression : LPAREN expression RPAREN'
-        t[0] = t[2]
-        # t[0] = Node("exp_group", [t[2]], None)
-
-    def p_expression_number(self, t):
-        'expression : NUMBER'
-        '''expression : NUMBER 
-                    | XINP'''
-        t[0] = t[1]
-        # t[0] = Node("number", None, t[1])
-
-    # def p_factor_num(p):
-    #  'factor : NUMBER'
-    #  p[0] = p[1]
-
-    # def p_expression_name(self, t):
-    #     'expression : NAME'
-    #     try:
-    #         t[0] = self.names[t[1]]
-    #     except LookupError:
-    #         print("Undefined name '%s'" % t[1])
-    #         t[0] = 0
-
-    def p_error(self, t):
-        print("Syntax error at '%s'" % t.value)
-
-def parse(string):
+def parse_(string):
     return Parser().parse(string, lexer=Lexer())
 
 if __name__ == "__main__":
-    parse("4+7/x[0]")
+    expression = parse_("4+7/x[0]")
+    print(expression)

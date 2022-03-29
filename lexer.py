@@ -2,11 +2,9 @@ from ply import lex
 from ply.lex import Token
 
 tokens = (
-    # 'NAME','NUMBER',
-    'NUMBER'
-    # 'PLUS','MINUS','TIMES','DIVIDE','EQUALS',
-    'PLUS','MINUS','TIMES','DIVIDE',
-    'LPAREN','RPAREN', 'XINP'
+    'NUMBER', 'XINP', 'PLUS',
+    'MINUS','TIMES','DIVIDE',
+    'LPAREN','RPAREN'
     )
 
 ## Normally PLY works at the module level. Here it is encapsulated as a class. 
@@ -25,11 +23,8 @@ class Lexer(object):
     t_MINUS   = r'-'
     t_TIMES   = r'\*'
     t_DIVIDE  = r'/'
-    t_EQUALS  = r'='
     t_LPAREN  = r'\('
     t_RPAREN  = r'\)'
-    t_NAME    = r'[a-zA-Z_][a-zA-Z0-9_]*'
-
     
     # A regular expression rule with some action code
     x_inp = r"x\[0\]"
@@ -41,7 +36,7 @@ class Lexer(object):
     number = r'\d+'
     @Token(number)
     def t_NUMBER(self, token):
-        token.value = int(token.value)    
+        token.value = str(token.value)    
         return token
     
     # Define a rule so we can track line numbers

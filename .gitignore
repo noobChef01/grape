@@ -1,0 +1,11 @@
+# cache files
+__pycache__
+
+# config files
+pyvenv.cfg
+
+# folders to ignore
+bin
+grammars
+lib
+

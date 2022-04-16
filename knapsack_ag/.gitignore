@@ -1,0 +1,5 @@
+# cache files
+__pycache__
+
+# folders to ignore
+data

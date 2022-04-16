@@ -1,0 +1,6 @@
+# cache files
+__pycache__
+
+# parser tables generated and out file
+*tab.py
+parser.out

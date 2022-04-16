@@ -7,8 +7,6 @@ from re import match, finditer, DOTALL, MULTILINE
 from sys import maxsize
 from random import random, choice, randrange, randint, shuffle, sample
 from operator import attrgetter
-from parser import parse_
-import re
 
 class ge(object):
     
@@ -137,11 +135,6 @@ class ge(object):
     
                     # Generate individual using "Grow"
                     ind = generate_PI_ind_tree(ind_class, depth, bnf_grammar, max_tree_depth, max_wraps, codon_size)
-                    new_ind_phenotype = parse_(ind.phenotype)
-                    if ind.phenotype != new_ind_phenotype:
-                    # Append individual to population
-                       ind.depth = ind.depth + len(re.findall(r"/", new_ind_phenotype)) 
-                    ind.phenotype = new_ind_phenotype
                     population.append(ind)
     
             if remainder:
@@ -155,11 +148,6 @@ class ge(object):
     
                 # Generate individual using "Grow"
                 ind = generate_PI_ind_tree(ind_class, depth, bnf_grammar, max_tree_depth, max_wraps, codon_size)
-                new_ind_phenotype = parse_(ind.phenotype)
-                if ind.phenotype != new_ind_phenotype:
-                    # Append individual to population
-                    ind.depth = ind.depth + len(re.findall(r"/", new_ind_phenotype)) 
-                ind.phenotype = new_ind_phenotype
                 # Append individual to population
                 population.append(ind)
     

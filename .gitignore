@@ -9,3 +9,5 @@ bin
 grammars
 lib
 
+# editable environment data
+*.egg-info

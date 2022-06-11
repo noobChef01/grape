@@ -1,5 +1,5 @@
 from ply import yacc
-from lexer_files.lexer import tokens, Lexer
+from lexer_files_reg.lexer import tokens, Lexer
 
 class Parser(object):
     tokens = tokens

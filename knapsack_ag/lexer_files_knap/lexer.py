@@ -1,9 +1,9 @@
 from ply import lex
 from ply.lex import Token
+import re
 
 tokens = (
-    'ZERO',
-    'ONE'
+    'SYMBOL',
     )
 
 ## Normally PLY works at the module level. Here it is encapsulated as a class. 
@@ -19,16 +19,16 @@ class Lexer(object):
     tokens = tokens
 
     # A regular expression rule with some action code
-    zero = r'0'
-    @Token(zero)
-    def t_ZERO(self, token):
-        token.value = (int(token.value), token.lexpos)    
-        return token
-
-    one = r'1'
-    @Token(one)
-    def t_ONE(self, token):
-        token.value = (int(token.value), token.lexpos)    
+    symbol = r"S_?\d+"
+    @Token(symbol)
+    def t_SYMBOL(self, token):
+        string_value = str(token.value)
+        match = re.search(r"\d+", string_value) 
+        if match:
+            pos = int(match[0]) 
+        match = re.search(r"_", string_value)
+        bit = 0 if match else 1
+        token.value = (pos, bit)    
         return token
 
     # Define a rule so we can track line numbers
@@ -47,7 +47,7 @@ class Lexer(object):
 
 if __name__ == "__main__":
     lexer_ = Lexer()
-    data = '010101010'
+    data = 'S_10S8S_5S9S10S10S_9S_1S1S_1'
     lexer_.input(data)
     while True:
         tok = lexer_.token()

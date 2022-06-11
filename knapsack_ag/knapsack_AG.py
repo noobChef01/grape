@@ -11,7 +11,7 @@ import textwrap
 import csv
 import random
 import json
-from parser_files.parser import weight_parser, value_parser
+from parser_files_knap.parser import weight_parser, value_parser
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -19,14 +19,14 @@ warnings.filterwarnings("ignore")
 # generate weights for knapsack
 NBR_ITEMS = 10
 items = dict()
-for i in range(NBR_ITEMS):
+for i in range(1, 1+NBR_ITEMS):
     items[i] = (random.randint(1, 10), random.randint(1, 100))
 
 with open("/mnt/d/college_notes/internship/grape/knapsack_ag/data/knapsack_weights.json", "w") as file:
     json.dump(items, file)
 
 
-GRAMMAR_FILE = 'knapsack.bnf'
+GRAMMAR_FILE = 'knapsack_new.bnf'
 BNF_GRAMMAR = Grammar(
     path.join("/mnt/d/college_notes/internship/grape/grammars", GRAMMAR_FILE))
 
@@ -75,9 +75,9 @@ P_MUTATION = 0.01
 ELITE_SIZE = round(0.01*POPULATION_SIZE)
 
 HALL_OF_FAME_SIZE = 1
-MAX_INIT_TREE_DEPTH = 12
-MIN_INIT_TREE_DEPTH = 11
-MAX_TREE_DEPTH = 11
+MAX_INIT_TREE_DEPTH = 7
+MIN_INIT_TREE_DEPTH = 3
+MAX_TREE_DEPTH = 8
 MAX_WRAPS = 0
 CODON_SIZE = 255
 

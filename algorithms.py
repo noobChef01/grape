@@ -83,9 +83,11 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
     
     logbook = tools.Logbook()
     if points_test:
-        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        # logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'selection_time', 'generation_time']
     else:
-        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        # logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'selection_time', 'generation_time']
 
     start_gen = time.time()        
     # Evaluate the individuals with an invalid fitness
@@ -107,7 +109,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
     unique_fitnesses = np.unique(list_fitnesses, return_counts=False)  
     
     structural_diversity = len(unique_structures)/len(population)
-    fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
+    # fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
     
     valid = [ind for ind in population if not math.isnan(ind.fitness.values[0])]
     
@@ -155,7 +157,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
                        avg_used_codons=avg_used_codons,
                        best_ind_used_codons=best_ind_used_codons,
                        structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
+                    #    fitness_diversity=fitness_diversity,
                        selection_time=selection_time, 
                        generation_time=generation_time)
     else:
@@ -168,7 +170,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
                        avg_used_codons=avg_used_codons,
                        best_ind_used_codons=best_ind_used_codons,
                        structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
+                    #    fitness_diversity=fitness_diversity,
                        selection_time=selection_time, 
                        generation_time=generation_time)
     if verbose:
@@ -213,7 +215,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
         unique_fitnesses = np.unique(list_fitnesses, return_counts=False)  
         
         structural_diversity = len(unique_structures)/len(population)
-        fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
+        # fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
             
         valid = [ind for ind in population if not math.isnan(ind.fitness.values[0])]
         
@@ -262,7 +264,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
                        avg_used_codons=avg_used_codons,
                        best_ind_used_codons=best_ind_used_codons,
                        structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
+                    #    fitness_diversity=fitness_diversity,
                        selection_time=selection_time, 
                        generation_time=generation_time)
         else:
@@ -275,7 +277,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
                        avg_used_codons=avg_used_codons,
                        best_ind_used_codons=best_ind_used_codons,
                        structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
+                    #    fitness_diversity=fitness_diversity,
                        selection_time=selection_time, 
                        generation_time=generation_time)
                 

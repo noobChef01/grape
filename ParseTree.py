@@ -1,30 +1,7 @@
 import re
 import json
+from Token import (T_NT, T_T, Token)
 from treelib import Node, Tree
-
-T_NT = 'NT'
-T_T = 'T'
-
-
-class Token(object):
-
-    def __init__(self, type, name, meta=None) -> None:
-        self.type = type
-        self.name = name
-        self.meta = meta
-
-    def __str__(self) -> str:
-        '''
-        String representation of class instance.
-
-        Examples: 
-            Token(NT, '<expr>', None)
-            Token(T, 'X1', {"value": 10, "weight": 50})
-        '''
-        return f"Token({self.type}, {self.name}, {self.meta})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 class ParseTree(object):
@@ -106,50 +83,3 @@ class ParseTree(object):
         if property:
             return self.tree.show(data_property=property)
         return self.tree.show()
-
-
-class Interpreter(object):
-
-    def __init__(self, w_threshold, meta_file_path) -> None:
-        super().__init__()
-        self.w_threshold = w_threshold
-        self.value = None
-        self.weight = None
-        self.meta_data = self.load_meta_data(meta_file_path)
-        self.sorted_value_items = self.most_valuable()
-
-    def load_meta_data(self, meta_file):
-        with open(meta_file) as file:
-            return json.load(file)
-
-    def most_valuable(self):
-        value_weight_ratio = dict()
-        for key in self.meta_data:
-            value_weight_ratio[key] = self.meta_data[key]['value'] / \
-                self.meta_data[key]['weight']
-        return sorted(value_weight_ratio, key=lambda k: value_weight_ratio[k], reverse=True)
-
-    def visit(self, tree, node_id):
-        node = tree.get_node(node_id)
-        if node.data.meta:
-            bit = int(re.search(r'BIT:(\d+)_', node.tag).group(1))
-            value, weight = bit * \
-                node.data.meta['value'], bit*node.data.meta['weight']
-            self.value = (self.value if self.value else 0) + value
-            self.weight = (self.weight if self.weight else 0) + weight
-        for child in tree.children(node_id):
-            self.visit(tree, child.identifier)
-
-    def interpret(self, tree):
-        root_id = tree.root
-        return self.visit(tree, root_id)
-
-    def reset_params(self):
-        self.value = None
-        self.weight = None
-
-    def tree_meta_data(self, tree):
-        self.reset_params()
-        self.interpret(tree)
-        # return self.value, self.weight, self.used_terminals
-        return self.value, self.weight

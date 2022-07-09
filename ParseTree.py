@@ -1,33 +1,56 @@
 import re
 import json
-from Token import (T_NT, T_T, Token)
-from treelib import Node, Tree
+from treelib import Tree
+
+
+T_NT = 'NT'
+T_T = 'T'
+
+
+class Token(object):
+
+    def __init__(self, type, name, meta=None) -> None:
+        self.type = type
+        self.name = name
+        self.meta = meta
+
+    def __str__(self) -> str:
+        '''
+        String representation of class instance.
+
+        Examples: 
+            Token(NT, '<expr>', None)
+            Token(T, 'X1', {"value": 10, "weight": 50})
+        '''
+        return f"Token({self.type}, {self.name}, {self.meta})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 class ParseTree(object):
 
-    def __init__(self, grammar, meta_file_path):
+    def __init__(self, grammar, node_meta, type='knapsack'):
         self.lvl = 0
+        self.type = type
         self.expansion_idx = 0
         self.start_rule = grammar.start_rule
         self.terminals = set(grammar.terminals)
-        self.non_terminals = set(grammar.non_terminals)
-        self.meta_data = self.load_meta_data(meta_file_path)
+        self.node_meta = node_meta
         self.tree = Tree()
         self.make_root()
-
-    def load_meta_data(self, meta_file):
-        with open(meta_file) as file:
-            return json.load(file)
 
     def node_name(self, token_name):
         return re.sub(r'<|>', '', token_name)
 
     def make_token(self, token_name, token_idx=None):
         if token_name in self.terminals:
-            return Token(T_T, f'bit:{token_name}_pos:{token_idx}', meta=self.meta_data.get(f'{token_idx}'))
+            if self.type == 'knapsack':
+                return Token(T_T, token_name, meta=self.node_meta.get(f'{token_idx}'))
+            else:
+                return Token(T_T, token_name, meta=self.node_meta.get(token_name))
         else:
-            return Token(T_NT, token_name, meta=self.meta_data.get(token_name))
+            return Token(T_NT, token_name, meta=self.node_meta.get(token_name))
 
     def make_root(self):
         root_name = self.node_name(self.start_rule)

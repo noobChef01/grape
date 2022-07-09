@@ -7,12 +7,7 @@ Created on Tue May 10 06:53:28 2022
 
 import re
 import math
-from operator import attrgetter
-import numpy as np
 import random
-
-from parso import parse
-from Token import (T_T, T_NT, Token)
 from ParseTree import ParseTree
 from EvalTree import EvalTree
 
@@ -389,11 +384,14 @@ def sensible_initialisation(ind_class, pop_size, bnf_grammar, min_init_depth, ma
     return population
 
 
-def sensible_initialisation_knapsack_AG(ind_class, pop_size, w_threshold, meta_file_path, bnf_grammar, min_init_depth, max_init_depth, codon_size):
+def is_valid_PR(curr_weight, bit, node_meta, node_pos, w_thres):
+    return (curr_weight + (int(bit) * node_meta[f'{node_pos+1}']['weight'])) <= w_thres
+
+
+def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, codon_size, eval_tree):
     """
 
     """
-    # TODO: remove threshold and meta_file variabels usage 
 
     # Calculate the number of individuals to be generated with each method
     is_odd = pop_size % 2
@@ -423,42 +421,33 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, w_threshold, meta_f
             depths = [1]*len(remaining_NTs)
 
             idx_branch = 0  # index of the current branch being grown
-
             parse_tree = ParseTree(grammar=bnf_grammar,
-                                   meta_file_path=meta_file_path)
-            eval_tree = Interpreter(
-                w_threshold=w_threshold, meta_file_path=meta_file_path)
-            parse_tree.set_expansion_node(idx_branch)
+                                   node_meta=eval_tree.terminal_node_meta)
             while len(remaining_NTs) != 0:
-                value, weight = eval_tree.tree_meta_data(
-                    parse_tree.tree)
                 idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
+
                 total_options = [
                     PR for PR in bnf_grammar.production_rules[idx_NT]]
-                # actual_options = [PR for PR in bnf_grammar.production_rules[idx_NT]
-                #                   if PR[5] + depths[idx_branch] <= max_init_depth_ and PR[0] not in used_terminals]
-                actual_options = [PR for PR in bnf_grammar.production_rules[idx_NT]
-                                  if PR[5] + depths[idx_branch] <= max_init_depth_]
-                # temp = []
-                # for PR in actual_options:
-                #     if PR[1] == 'terminal' and ((weight if weight else 0) + eval_tree.meta_data[PR[0]]['weight']) <= eval_tree.w_threshold:
-                #         temp.append(PR)
-                #     else:
-                #         temp.append(PR)
-                temp = []
-                for PR in actual_options:
-                    if PR[1] == 'terminal' and ((weight if weight else 0) + (int(PR[0]) * eval_tree.meta_data[f'{idx_branch+1}']['weight'])) <= eval_tree.w_threshold:
-                        temp.append(PR)
-                    if PR[1] == 'non-terminal':
-                        temp.append(PR)
-                actual_options = temp
-                # TODO: try using only most valuable options
+
+                curr_weight = eval_tree.tree_meta_data(
+                    parse_tree.tree)
+                actual_options = []
+                for PR in bnf_grammar.production_rules[idx_NT]:
+                    if PR[5] + depths[idx_branch] <= max_init_depth_:
+                        if PR[1] == 'terminal' \
+                            and is_valid_PR(
+                                curr_weight, PR[0],
+                                eval_tree.terminal_node_meta,
+                                idx_branch,
+                                eval_tree.w_threshold):
+                            actual_options.append(PR)
+                        if PR[1] == 'non-terminal':
+                            actual_options.append(PR)
+
                 Ch = random.choice(actual_options)
                 phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
                 parse_tree.update_tree(phenotype)
-                # print(parse_tree.display())
                 parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
-                # print(parse_tree.display())
                 depths[idx_branch] += 1
                 remainders.append(Ch[3])
                 possible_choices.append(len(total_options))
@@ -509,33 +498,27 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, w_threshold, meta_f
         idx_branch = 0  # index of the current branch being grown
 
         parse_tree = ParseTree(grammar=bnf_grammar,
-                               meta_file_path=meta_file_path)
-        eval_tree = Interpreter(w_threshold=w_threshold,
-                                meta_file_path=meta_file_path)
+                               node_meta=eval_tree.terminal_node_meta)
 
-        parse_tree.set_expansion_node(idx_branch)
         while len(remaining_NTs) != 0:
-            value, weight = eval_tree.tree_meta_data(
-                parse_tree.tree)
             idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
             total_options = [PR for PR in bnf_grammar.production_rules[idx_NT]]
-            # actual_options = [PR for PR in bnf_grammar.production_rules[idx_NT]
-            #    if PR[5] + depths[idx_branch] <= max_init_depth_ and PR[0] not in used_terminals]
-            actual_options = [PR for PR in bnf_grammar.production_rules[idx_NT]
-                              if PR[5] + depths[idx_branch] <= max_init_depth_]
-            # temp = []
-            # for PR in actual_options:
-            #     if PR[1] == 'terminal' and ((weight if weight else 0) + eval_tree.meta_data[PR[0]]['weight']) <= eval_tree.w_threshold:
-            #         temp.append(PR)
-            #     else:
-            #         temp.append(PR)
-            temp = []
-            for PR in actual_options:
-                if PR[1] == 'terminal' and ((weight if weight else 0) + (int(PR[0]) * eval_tree.meta_data[f'{idx_branch+1}']['weight'])) <= eval_tree.w_threshold:
-                    temp.append(PR)
-                if PR[1] == 'non-terminal':
-                    temp.append(PR)
-            actual_options = temp
+
+            curr_weight = eval_tree.tree_meta_data(
+                parse_tree.tree)
+            actual_options = []
+            for PR in bnf_grammar.production_rules[idx_NT]:
+                if PR[5] + depths[idx_branch] <= max_init_depth_:
+                    if PR[1] == 'terminal' \
+                        and is_valid_PR(
+                            curr_weight, PR[0],
+                            eval_tree.terminal_node_meta,
+                            idx_branch,
+                            eval_tree.w_threshold):
+                        actual_options.append(PR)
+                    if PR[1] == 'non-terminal':
+                        actual_options.append(PR)
+
             recursive_options = [PR for PR in actual_options if PR[4]]
             if len(recursive_options) > 0:
                 Ch = random.choice(recursive_options)
@@ -543,9 +526,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, w_threshold, meta_f
                 Ch = random.choice(actual_options)
             phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
             parse_tree.update_tree(phenotype)
-            # print(parse_tree.display())
             parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
-            # print(parse_tree.display())
             depths[idx_branch] += 1
             remainders.append(Ch[3])
             possible_choices.append(len(total_options))
@@ -830,7 +811,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, w_threshold, meta_file_path, bnf_gr
             eval_tree = Interpreter(
                 w_threshold=w_threshold, meta_file_path=meta_file_path)
             while len(remaining_NTs) != 0:
-                value, weight = eval_tree.tree_meta_data(
+                weight = eval_tree.tree_meta_data(
                     parse_tree.tree)
                 choose_ = False
                 if max(depths) < max_init_depth_:
@@ -937,7 +918,6 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, w_threshold, meta_file_path, bnf_gr
                                 idx_branch = k
                                 break
                             count_ += 1
-                    # value, weight = eval_tree.tree_meta_data(parse_tree.tree)
                     idx_NT = bnf_grammar.non_terminals.index(
                         remaining_NTs[PI_index])
                     total_options = [

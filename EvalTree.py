@@ -3,34 +3,43 @@ import json
 
 
 class EvalTree(object):
+    '''
+    Base class for Tree Evaluation, which reads in the terminal node 
+    definitions specified in a json file.
+    '''
 
-    def __init__(self, w_threshold, meta_file_path) -> None:
-        super().__init__()
-        self.w_threshold = w_threshold
-        self.value = None
-        self.weight = None
-        self.meta_data = self.load_meta_data(meta_file_path)
-        self.sorted_value_items = self.most_valuable()
+    def __init__(self, meta_file_path):
+        self.terminal_node_meta = self.load_terminal_meta(meta_file_path)
 
-    def load_meta_data(self, meta_file):
-        with open(meta_file) as file:
+    def load_terminal_meta(self, meta_file_path):
+        with open(meta_file_path) as file:
             return json.load(file)
+
+
+class EvalKnapSackTree(EvalTree):
+    '''
+    Evaluate a knapsack Parse Tree consisting of 0 and 1 bits at the 
+    terminals.'''
+
+    def __init__(self, w_threshold, meta_file_path):
+        super().__init__(meta_file_path)
+        self.w_threshold = w_threshold
+        self.curr_weight = 0
+        self.sorted_value_items = self.most_valuable()
 
     def most_valuable(self):
         value_weight_ratio = dict()
-        for key in self.meta_data:
-            value_weight_ratio[key] = self.meta_data[key]['value'] / \
-                self.meta_data[key]['weight']
+        for key in self.terminal_node_meta:
+            value_weight_ratio[key] = self.terminal_node_meta[key]['value'] \
+                / self.terminal_node_meta[key]['weight']
         return sorted(value_weight_ratio, key=lambda k: value_weight_ratio[k], reverse=True)
 
     def visit(self, tree, node_id):
         node = tree.get_node(node_id)
         if node.data.meta:
             bit = int(re.search(r'BIT:(\d+)_', node.tag).group(1))
-            value, weight = bit * \
-                node.data.meta['value'], bit*node.data.meta['weight']
-            self.value = (self.value if self.value else 0) + value
-            self.weight = (self.weight if self.weight else 0) + weight
+            weight = bit * node.data.meta['weight']
+            self.curr_weight = self.curr_weight + weight
         for child in tree.children(node_id):
             self.visit(tree, child.identifier)
 
@@ -39,10 +48,9 @@ class EvalTree(object):
         return self.visit(tree, root_id)
 
     def reset_params(self):
-        self.value = None
-        self.weight = None
+        self.curr_weight = 0
 
     def tree_meta_data(self, tree):
         self.reset_params()
         self.evaluate(tree)
-        return self.value, self.weight
+        return self.curr_weight

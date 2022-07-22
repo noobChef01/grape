@@ -6,3 +6,7 @@ __pycache__
 
 # virtual env
 myenv
+
+# ignore folders 
+tests
+experiments

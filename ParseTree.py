@@ -40,6 +40,10 @@ class ParseTree(object):
         self.tree = Tree()
         self.make_root()
 
+    def reset_tree(self):
+        self.tree = Tree()
+        self.make_root()
+
     def node_name(self, token_name):
         return re.sub(r'<|>', '', token_name)
 
@@ -75,7 +79,15 @@ class ParseTree(object):
                     self.expansion_idx].identifier
 
     def update_tree(self, phenotype):
-        tokens = re.findall(f"<\w+>|{'|'.join(self.terminals)}", phenotype)
+        formatted_t = []
+        for t in self.terminals:
+            match = re.match(r'x\[(\d+)\]', t)
+            if match:
+                formatted_t.append(r'x\[{}\]'.format(match.group(1)))
+            else:
+                formatted_t.append(t)
+        tokens = re.findall(
+            r"<\w+>|\d+\.\d+|{}".format('|'.join(formatted_t)), phenotype)
         tokens = [self.make_token(tok, i+1) for i, tok in enumerate(tokens)]
         for col, token in enumerate(tokens):
             token_name = self.node_name(token.name)

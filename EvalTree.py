@@ -37,7 +37,7 @@ class EvalKnapSackTree(EvalTree):
     def visit(self, tree, node_id):
         node = tree.get_node(node_id)
         if node.data.meta:
-            bit = int(re.search(r'BIT:(\d+)_', node.tag).group(1))
+            bit = int(re.search(r'\d+', node.tag).group(0))
             weight = bit * node.data.meta['weight']
             self.curr_weight = self.curr_weight + weight
         for child in tree.children(node_id):
@@ -54,3 +54,28 @@ class EvalKnapSackTree(EvalTree):
         self.reset_params()
         self.evaluate(tree)
         return self.curr_weight
+
+
+class EvalSymRegTree(EvalTree):
+
+    def __init__(self, tree):
+        self.tree = tree
+
+    def visit(self, node_id):
+        node = self.tree.get_node(node_id)
+        if node.tag == 'DIVIDE':
+            parent = self.tree.parent(node.identifier)
+            children = self.tree.children(parent.identifier)
+            for i, child in enumerate(children):
+                if child.identifier == node.identifier:
+                    self.tree.update_node(children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
+        for child in self.tree.children(node_id):
+            self.visit(child.identifier)
+
+    def evaluate(self):
+        root_id = self.tree.root
+        return self.visit(root_id)
+
+    # def tree_meta_data(self, tree):
+    #     self.evaluate(tree)
+    #     return self.curr_weight

@@ -22,7 +22,7 @@ from deap import tools
 
 
 def varAnd(population, toolbox, cxpb, mutpb,
-           bnf_grammar, codon_size, max_tree_depth):
+           bnf_grammar, codon_size, max_tree_depth, type, eval_tree):
     """Part of an evolutionary algorithm applying only the variation part
     (crossover **and** mutation). The modified individuals have their
     fitness invalidated. The individuals are cloned so returned population is
@@ -42,14 +42,23 @@ def varAnd(population, toolbox, cxpb, mutpb,
     # Apply crossover and mutation on the offspring
     for i in range(1, len(offspring), 2):
         if random.random() < cxpb:
-            offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
-                                                          offspring[i],
-                                                          bnf_grammar, max_tree_depth)
+            if type == 'knapsack':
+                offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
+                                                              offspring[i],
+                                                              bnf_grammar, max_tree_depth, eval_tree)
+            else:
+                offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
+                                                              offspring[i],
+                                                              bnf_grammar, max_tree_depth)
             del offspring[i - 1].fitness.values, offspring[i].fitness.values
 
     for i in range(len(offspring)):
-        offspring[i], = toolbox.mutate(offspring[i], mutpb,
-                                       codon_size, bnf_grammar, max_tree_depth)
+        if type == 'knapsack':
+            offspring[i], = toolbox.mutate(offspring[i], mutpb,
+                                           codon_size, bnf_grammar, max_tree_depth, eval_tree)
+        else:
+            offspring[i], = toolbox.mutate(offspring[i], mutpb,
+                                           codon_size, bnf_grammar, max_tree_depth)
         del offspring[i].fitness.values
 
     return offspring
@@ -58,7 +67,7 @@ def varAnd(population, toolbox, cxpb, mutpb,
 def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
                            bnf_grammar, codon_size, max_tree_depth,
                            points_train, points_test=None, stats=None, halloffame=None,
-                           verbose=__debug__):
+                           verbose=__debug__, type=None, eval_tree=None):
     """This algorithm reproduce the simplest evolutionary algorithm as
     presented in chapter 7 of [Back2000]_, with some adaptations to run GE
     on GRAPE.
@@ -226,7 +235,7 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
 
         # Vary the pool of individuals
         offspring = varAnd(offspring, toolbox, cxpb, mutpb,
-                           bnf_grammar, codon_size, max_tree_depth)
+                           bnf_grammar, codon_size, max_tree_depth, type, eval_tree)
 
         # Evaluate the individuals with an invalid fitness
         for ind in offspring:

@@ -58,23 +58,24 @@ class EvalKnapSackTree(EvalTree):
 
 class EvalSymRegTree(EvalTree):
 
-    def __init__(self, tree):
-        self.tree = tree
+    def __init__(self, meta_file_path):
+        super().__init__(meta_file_path)
+        # self.tree = tree
 
-    def visit(self, node_id):
-        node = self.tree.get_node(node_id)
+    def visit(self, tree, node_id):
+        node = tree.get_node(node_id)
         if node.tag == 'DIVIDE':
             parent = self.tree.parent(node.identifier)
-            children = self.tree.children(parent.identifier)
+            children = tree.children(parent.identifier)
             for i, child in enumerate(children):
                 if child.identifier == node.identifier:
-                    self.tree.update_node(children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
-        for child in self.tree.children(node_id):
-            self.visit(child.identifier)
+                    tree.update_node(children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
+        for child in tree.children(node_id):
+            self.visit(tree, child.identifier)
 
-    def evaluate(self):
-        root_id = self.tree.root
-        return self.visit(root_id)
+    def evaluate(self, tree):
+        root_id = tree.root
+        return self.visit(tree, root_id)
 
     # def tree_meta_data(self, tree):
     #     self.evaluate(tree)

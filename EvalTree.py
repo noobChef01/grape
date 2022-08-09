@@ -9,7 +9,7 @@ class EvalTree(object):
     '''
 
     def __init__(self, meta_file_path):
-        self.terminal_node_meta = self.load_terminal_meta(meta_file_path)
+        self.node_meta = self.load_terminal_meta(meta_file_path)
 
     def load_terminal_meta(self, meta_file_path):
         with open(meta_file_path) as file:
@@ -25,14 +25,6 @@ class EvalKnapSackTree(EvalTree):
         super().__init__(meta_file_path)
         self.w_threshold = w_threshold
         self.curr_weight = 0
-        self.sorted_value_items = self.most_valuable()
-
-    def most_valuable(self):
-        value_weight_ratio = dict()
-        for key in self.terminal_node_meta:
-            value_weight_ratio[key] = self.terminal_node_meta[key]['value'] \
-                / self.terminal_node_meta[key]['weight']
-        return sorted(value_weight_ratio, key=lambda k: value_weight_ratio[k], reverse=True)
 
     def visit(self, tree, node_id):
         node = tree.get_node(node_id)
@@ -69,7 +61,8 @@ class EvalSymRegTree(EvalTree):
             children = tree.children(parent.identifier)
             for i, child in enumerate(children):
                 if child.identifier == node.identifier:
-                    tree.update_node(children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
+                    tree.update_node(
+                        children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
         for child in tree.children(node_id):
             self.visit(tree, child.identifier)
 

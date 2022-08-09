@@ -6,6 +6,7 @@ Created on Tue May 10 06:53:28 2022
 """
 
 import re
+import gc
 import math
 import random
 from ParseTree import ParseTree
@@ -124,7 +125,7 @@ class Grammar(object):
                 else:  # a non-terminal can be recursive
                     for k in range(len(check_recursiveness)):
                         # Check if a recursive NT is in the current list of PR
-                        # TODO I just changed from self.non_terminals[k] to check_recursiveness[k]
+                        # TODO: I just changed from self.non_terminals[k] to check_recursiveness[k]
                         if check_recursiveness[k] in self.production_rules[i][j][0]:
                             recursive = True
                             break  # since we already found a recursive NT in this PR, we can stop
@@ -188,7 +189,6 @@ class Grammar(object):
 
 
 def mapper(genome, grammar, max_depth):
-
     idx_genome = 0
     phenotype = grammar.start_rule
     next_NT = re.search(r"\<(\w+)\>", phenotype).group()
@@ -243,14 +243,6 @@ def mapper(genome, grammar, max_depth):
     return phenotype, nodes, depth, used_codons, invalid, 0, structure
 
 
-def is_overweight(phenotype, parse_tree, eval_tree):
-    parse_tree.update_tree(phenotype)
-    parse_tree.collapse_tree()
-    curr_weight = eval_tree.tree_meta_data(
-        parse_tree.tree)
-    return curr_weight > eval_tree.w_threshold
-
-
 def knapsack_mapper(genome, grammar, max_depth, eval_tree):
     idx_genome = 0
     phenotype = grammar.start_rule
@@ -262,28 +254,34 @@ def knapsack_mapper(genome, grammar, max_depth, eval_tree):
     nodes = 0
     structure = []
     parse_tree = ParseTree(grammar=grammar,
-                           node_meta=eval_tree.terminal_node_meta)
+                           node_meta=eval_tree.node_meta)
     while next_NT and idx_genome < len(genome):
         NT_index = grammar.non_terminals.index(next_NT)
-        index_production_chosen = genome[idx_genome] % grammar.n_rules[NT_index]
-        old_phenotype = phenotype
+        temp_prod_idx = genome[idx_genome] % grammar.n_rules[NT_index]
+        temp_prod_chosen = grammar.production_rules[NT_index][temp_prod_idx]
+        curr_weight = eval_tree.tree_meta_data(parse_tree.tree)
+
+        if (temp_prod_chosen[1] != 'terminal') \
+            or (temp_prod_chosen[1] == 'terminal'
+                and is_valid_PR(
+                curr_weight, temp_prod_chosen[0],
+                eval_tree.node_meta['meta'],
+                idx_depth,
+                eval_tree.w_threshold)):
+            index_production_chosen = temp_prod_idx
+        else:
+            index_production_chosen = random.choice([i for i in range(
+                len(grammar.production_rules[NT_index])) if i != temp_prod_idx])
+            # update genome to use other available productions
+            to_add = 0
+            while (to_add+genome[idx_genome]) % grammar.n_rules[NT_index] != index_production_chosen:
+                to_add += 1
+            genome[idx_genome] = genome[idx_genome] + to_add
+
         phenotype = phenotype.replace(
             next_NT, grammar.production_rules[NT_index][index_production_chosen][0], 1)
-
-        if is_overweight(phenotype, parse_tree, eval_tree):
-            for i in range(len(grammar.production_rules[NT_index])):
-                if i == index_production_chosen:
-                    continue
-                curr_phenotype = old_phenotype.replace(
-                    next_NT, grammar.production_rules[NT_index][i][0], 1)
-                parse_tree.reset_tree()
-                parse_tree.update_tree(curr_phenotype)
-                parse_tree.collapse_tree()
-                if not is_overweight(curr_phenotype, parse_tree, eval_tree):
-                    index_production_chosen = i
-                    phenotype = curr_phenotype
-                    break
-
+        parse_tree.grow(
+            grammar.production_rules[NT_index][index_production_chosen][0])
         structure.append(index_production_chosen)
         list_depth[idx_depth] += 1
         if list_depth[idx_depth] > max_depth:
@@ -309,8 +307,11 @@ def knapsack_mapper(genome, grammar, max_depth, eval_tree):
             next_NT = next_.group()
         else:
             next_NT = None
+        parse_tree.set_expansion_node(idx_depth)
         idx_genome += 1
-
+    del parse_tree
+    gc.collect()
+    
     if next_NT:
         invalid = True
         used_codons = 0
@@ -517,7 +518,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
 
             idx_branch = 0  # index of the current branch being grown
             parse_tree = ParseTree(grammar=bnf_grammar,
-                                   node_meta=eval_tree.terminal_node_meta)
+                                   node_meta=eval_tree.node_meta)
             while len(remaining_NTs) != 0:
                 idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
 
@@ -532,7 +533,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
                         if PR[1] == 'terminal' \
                             and is_valid_PR(
                                 curr_weight, PR[0],
-                                eval_tree.terminal_node_meta,
+                                eval_tree.node_meta['meta'],
                                 idx_branch,
                                 eval_tree.w_threshold):
                             actual_options.append(PR)
@@ -541,8 +542,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
 
                 Ch = random.choice(actual_options)
                 phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
-                parse_tree.update_tree(phenotype)
-                parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
+                parse_tree.grow(Ch[0])
                 depths[idx_branch] += 1
                 remainders.append(Ch[3])
                 possible_choices.append(len(total_options))
@@ -560,6 +560,8 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
 
                 remaining_NTs = [
                     '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+            del parse_tree
+            gc.collect()
 
             # Generate the genome
             genome = []
@@ -574,7 +576,9 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
                 genome.append(random.randint(0, codon_size))
 
             # Initialise the individual and include in the population
+            # TODO: test out the new mapper method
             ind = ind_class(genome, bnf_grammar, max_init_depth_, eval_tree)
+            # ind = ind_class(genome, bnf_grammar, max_init_depth_)
 
             # Check if the individual was mapped correctly
             if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:
@@ -593,7 +597,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
         idx_branch = 0  # index of the current branch being grown
 
         parse_tree = ParseTree(grammar=bnf_grammar,
-                               node_meta=eval_tree.terminal_node_meta)
+                               node_meta=eval_tree.node_meta)
 
         while len(remaining_NTs) != 0:
             idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
@@ -607,7 +611,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
                     if PR[1] == 'terminal' \
                         and is_valid_PR(
                             curr_weight, PR[0],
-                            eval_tree.terminal_node_meta,
+                            eval_tree.node_meta['meta'],
                             idx_branch,
                             eval_tree.w_threshold):
                         actual_options.append(PR)
@@ -620,8 +624,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
             else:
                 Ch = random.choice(actual_options)
             phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
-            parse_tree.update_tree(phenotype)
-            parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
+            parse_tree.grow(Ch[0])
             depths[idx_branch] += 1
             remainders.append(Ch[3])
             possible_choices.append(len(total_options))
@@ -639,6 +642,8 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
 
             remaining_NTs = [
                 '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+        del parse_tree
+        gc.collect()
 
         # Generate the genome
         genome = []
@@ -653,7 +658,8 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
             genome.append(random.randint(0, codon_size))
 
         # Initialise the individual and include in the population
-        ind = ind_class(genome, bnf_grammar, max_init_depth_, eval_tree)
+        # ind = ind_class(genome, bnf_grammar, max_init_depth_, eval_tree)
+        ind = ind_class(genome, bnf_grammar, max_init_depth_)
 
         # Check if the individual was mapped correctly
         if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:
@@ -902,7 +908,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
             n_expansions = [0]*len(remaining_NTs)
 
             parse_tree = ParseTree(grammar=bnf_grammar,
-                                   node_meta=eval_tree.terminal_node_meta)
+                                   node_meta=eval_tree.node_meta)
             while len(remaining_NTs) != 0:
                 choose_ = False
                 if max(depths) < max_init_depth_:
@@ -921,7 +927,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                                     if PR[1] == 'terminal' \
                                             and is_valid_PR(
                                             curr_weight, PR[0],
-                                            eval_tree.terminal_node_meta,
+                                            eval_tree.node_meta['meta'],
                                             idx_branch,
                                             eval_tree.w_threshold):
                                         actual_options.append(PR)
@@ -946,7 +952,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                                 if PR[1] == 'terminal' \
                                             and is_valid_PR(
                                             curr_weight, PR[0],
-                                            eval_tree.terminal_node_meta,
+                                            eval_tree.node_meta['meta'],
                                             idx_branch,
                                             eval_tree.w_threshold):
                                     recursive_options.append(PR)
@@ -960,8 +966,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                         phenotype = replace_nth(
                             phenotype, remaining_NTs[PI_index], Ch[0], n_similar_NTs)
                         parse_tree.set_expansion_node(idx_branch)
-                        parse_tree.update_tree(phenotype)
-                        parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
+                        parse_tree.grow(Ch[0])
                         new_NTs = [
                             '<' + term + '>' for term in re.findall(r"\<(\w+)\>", Ch[0])]
                         list_phenotype = list_phenotype[0:idx_branch] + \
@@ -1026,7 +1031,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                             if PR[1] == 'terminal' \
                                     and is_valid_PR(
                                     curr_weight, PR[0],
-                                    eval_tree.terminal_node_meta,
+                                    eval_tree.node_meta['meta'],
                                     idx_branch,
                                     eval_tree.w_threshold):
                                 actual_options.append(PR)
@@ -1038,8 +1043,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                     phenotype = replace_nth(
                         phenotype, remaining_NTs[PI_index], Ch[0], n_similar_NTs)
                     parse_tree.set_expansion_node(idx_branch)
-                    parse_tree.update_tree(phenotype)
-                    parse_tree.collapse_tree()  # TODO: remove usage, use in-place replace of Node
+                    parse_tree.grow(Ch[0])
                     new_NTs = ['<' + term +
                                '>' for term in re.findall(r"\<(\w+)\>", Ch[0])]
                     list_phenotype = list_phenotype[0:idx_branch] + \
@@ -1078,6 +1082,9 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                     remaining_NTs = [
                         '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
 
+            del parse_tree
+            gc.collect()
+
             # Generate the genome
             genome = []
             for k in range(len(remainders)):
@@ -1091,7 +1098,9 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                 genome.append(random.randint(0, codon_size))
 
             # Initialise the individual and include in the population
+            # TODO: test for knapsack mapper
             ind = ind_class(genome, bnf_grammar, max_init_depth_, eval_tree)
+            # ind = ind_class(genome, bnf_grammar, max_init_depth_)
 
             # Check if the individual was mapped correctly
             if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:

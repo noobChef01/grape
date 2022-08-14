@@ -9,6 +9,8 @@ import re
 import gc
 import math
 import random
+from copy import deepcopy
+from treelib import Tree
 from ParseTree import ParseTree
 
 
@@ -27,9 +29,31 @@ class Individual(object):
             self.structure = mapper(genome, grammar, max_depth)
 
 
+class RegIndividual(object):
+    """
+    A GE individual for regression problem.
+    """
+
+    def __init__(self, genome, grammar, max_depth, invalid_flag, phenotype=None, stop_len=None):
+        """
+        """
+
+        self.genome = genome
+
+        if invalid_flag:
+            self.phenotype, self.nodes, self.depth, \
+                self.used_codons, self.invalid, self.n_wraps, \
+                self.structure = invalid_mapper(
+                    genome, grammar, max_depth, phenotype, stop_len)
+        else:
+            self.phenotype, self.nodes, self.depth, \
+                self.used_codons, self.invalid, self.n_wraps, \
+                self.structure = mapper(genome, grammar, max_depth)
+
+
 class KnapsackIndividual(object):
     """
-    A GE individual.
+    A GE individual for knapsack problem.
     """
 
     def __init__(self, genome, grammar, max_depth, eval_tree):
@@ -243,6 +267,63 @@ def mapper(genome, grammar, max_depth):
     return phenotype, nodes, depth, used_codons, invalid, 0, structure
 
 
+def invalid_mapper(genome, grammar, max_depth, stop_phenotype, stop_len):
+    idx_genome = 0
+    phenotype = grammar.start_rule
+    next_NT = re.search(r"\<(\w+)\>", phenotype).group()
+    n_starting_NTs = len(
+        [term for term in re.findall(r"\<(\w+)\>", phenotype)])
+    list_depth = [1]*n_starting_NTs  # it keeps the depth of each branch
+    idx_depth = 0
+    nodes = 0
+    structure = []
+
+    while next_NT and idx_genome < len(genome) and idx_genome <= stop_len:
+        NT_index = grammar.non_terminals.index(next_NT)
+        index_production_chosen = genome[idx_genome] % grammar.n_rules[NT_index]
+        structure.append(index_production_chosen)
+        phenotype = phenotype.replace(
+            next_NT, grammar.production_rules[NT_index][index_production_chosen][0], 1)
+        list_depth[idx_depth] += 1
+        if list_depth[idx_depth] > max_depth:
+            break
+        # arity 0 (T)
+        if grammar.production_rules[NT_index][index_production_chosen][2] == 0:
+            idx_depth += 1
+            nodes += 1
+        # arity 1 (PR with one NT)
+        elif grammar.production_rules[NT_index][index_production_chosen][2] == 1:
+            pass
+        else:  # it is a PR with more than one NT
+            arity = grammar.production_rules[NT_index][index_production_chosen][2]
+            if idx_depth == 0:
+                list_depth = [list_depth[idx_depth], ] * \
+                    arity + list_depth[idx_depth+1:]
+            else:
+                list_depth = list_depth[0:idx_depth] + \
+                    [list_depth[idx_depth], ]*arity + list_depth[idx_depth+1:]
+
+        next_ = re.search(r"\<(\w+)\>", phenotype)
+        if next_:
+            next_NT = next_.group()
+        else:
+            next_NT = None
+        idx_genome += 1
+
+    # if next_NT:
+    #     invalid = True
+    #     used_codons = 0
+    # else:
+    #     invalid = False
+    #     used_codons = idx_genome
+    invalid = False
+    used_codons = idx_genome
+
+    depth = max(list_depth)
+
+    return stop_phenotype, nodes, depth, used_codons, invalid, 0, structure
+
+
 def knapsack_mapper(genome, grammar, max_depth, eval_tree):
     idx_genome = 0
     phenotype = grammar.start_rule
@@ -263,7 +344,7 @@ def knapsack_mapper(genome, grammar, max_depth, eval_tree):
 
         if (temp_prod_chosen[1] != 'terminal') \
             or (temp_prod_chosen[1] == 'terminal'
-                and is_valid_PR(
+                and is_valid_PR_knapsack(
                 curr_weight, temp_prod_chosen[0],
                 eval_tree.node_meta['meta'],
                 idx_depth,
@@ -311,7 +392,7 @@ def knapsack_mapper(genome, grammar, max_depth, eval_tree):
         idx_genome += 1
     del parse_tree
     gc.collect()
-    
+
     if next_NT:
         invalid = True
         used_codons = 0
@@ -480,7 +561,230 @@ def sensible_initialisation(ind_class, pop_size, bnf_grammar, min_init_depth, ma
     return population
 
 
-def is_valid_PR(curr_weight, bit, node_meta, node_pos, w_thres):
+def is_valid_PR_reg(parse_tree, PR, eval_tree):
+    parse_tree_copy = deepcopy(parse_tree)
+    parse_tree_copy.grow(PR)
+    return eval_tree.evaluate(parse_tree_copy.tree)
+
+
+def strip_unexpanded(phenotype):
+    last_span = list(re.finditer(r'DIVIDE|PLUS|MINUS|MULTIPLY', phenotype))[-1]
+    return phenotype[:last_span.span()[0]]
+
+
+def sensible_initialisation_reg_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, codon_size, eval_tree):
+    """
+
+    """
+
+    # Calculate the number of individuals to be generated with each method
+    is_odd = pop_size % 2
+    n_grow = int(pop_size/2)
+
+    n_sets_grow = max_init_depth - min_init_depth + 1
+    set_size = int(n_grow/n_sets_grow)
+    remaining = n_grow % n_sets_grow
+
+    # if pop_size is odd, generate an extra ind with "full"
+    n_full = n_grow + is_odd + remaining
+
+    # TODO check if it is possible to generate inds with max_init_depth
+    population = []
+    # Generate inds using "Grow"
+    for i in range(n_sets_grow):
+        max_init_depth_ = min_init_depth + i
+        for j in range(set_size):
+            remainders = []  # it will register the choices
+            possible_choices = []  # it will register the respective possible choices
+
+            phenotype = bnf_grammar.start_rule
+            remaining_NTs = [
+                '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+            # it keeps the depth of each branch
+            depths = [1]*len(remaining_NTs)
+            invalid_flag = False
+            idx_branch = 0  # index of the current branch being grown
+            parse_tree = ParseTree(grammar=bnf_grammar,
+                                   node_meta=eval_tree.node_meta)
+            cnt = 0
+            while len(remaining_NTs) != 0:
+                idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
+                total_options = [
+                    PR for PR in bnf_grammar.production_rules[idx_NT]]
+
+                actual_options = []
+                for PR in bnf_grammar.production_rules[idx_NT]:
+                    if PR[5] + depths[idx_branch] <= max_init_depth_:
+                        if PR[1] == 'terminal' \
+                                and is_valid_PR_reg(parse_tree, PR[0], eval_tree):
+                            actual_options.append(PR)
+                        if PR[1] == 'non-terminal':
+                            actual_options.append(PR)
+                if len(actual_options) == 0:
+                    # depth got exceeded, stop generation
+                    phenotype = strip_unexpanded(phenotype)
+                    remainders = remainders[:last_op_idx-1]
+                    possible_choices = possible_choices[:last_op_idx-1]
+                    invalid_flag = True
+                    break
+
+                Ch = random.choice(actual_options)
+                phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
+                parse_tree.grow(Ch[0])
+                depths[idx_branch] += 1
+                remainders.append(Ch[3])
+                cnt += 1
+                possible_choices.append(len(total_options))
+                if re.search(r'DIVIDE|PLUS|MINUS|MULTIPLY', Ch[0]):
+                    last_op_idx = cnt
+
+                if Ch[2] > 1:
+                    if idx_branch == 0:
+                        depths = [depths[idx_branch], ] * \
+                            Ch[2] + depths[idx_branch+1:]
+                    else:
+                        depths = depths[0:idx_branch] + \
+                            [depths[idx_branch], ]*Ch[2] + depths[idx_branch+1:]
+                    parse_tree.set_expansion_node(idx_branch)
+                if Ch[1] == 'terminal':
+                    idx_branch += 1
+                    parse_tree.set_expansion_node(idx_branch)
+
+                remaining_NTs = [
+                    '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+                parse_tree.set_expansion_node(idx_branch)
+
+            del parse_tree
+            gc.collect()
+
+            # Generate the genome
+            genome = []
+            for j in range(len(remainders)):
+                codon = (random.randint(0, 1e10) % math.floor(
+                    ((codon_size + 1) / possible_choices[j])) * possible_choices[j]) + remainders[j]
+                genome.append(codon)
+
+            # Include a tail with 50% of the genome's size
+            size_tail = int(0.5*len(genome))
+            for j in range(size_tail):
+                genome.append(random.randint(0, codon_size))
+
+            # Initialise the individual and include in the population
+            if invalid_flag:
+                ind = ind_class(genome, bnf_grammar, max_init_depth_,
+                                invalid_flag, phenotype, last_op_idx-1)
+                ind.structure = remainders
+            else:
+                ind = ind_class(genome, bnf_grammar,
+                                max_init_depth_, invalid_flag)
+
+            # Check if the individual was mapped correctly
+            if not invalid_flag:
+                if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:
+                    raise Exception('error in the mapping')
+
+            population.append(ind)
+
+    for i in range(n_full):
+        remainders = []  # it will register the choices
+        possible_choices = []  # it will register the respective possible choices
+
+        phenotype = bnf_grammar.start_rule
+        remaining_NTs = ['<' + term +
+                         '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+        depths = [1]*len(remaining_NTs)  # it keeps the depth of each branch
+        idx_branch = 0  # index of the current branch being grown
+
+        parse_tree = ParseTree(grammar=bnf_grammar,
+                               node_meta=eval_tree.node_meta)
+        invalid_flag = False
+        cnt = 0
+        while len(remaining_NTs) != 0:
+            idx_NT = bnf_grammar.non_terminals.index(remaining_NTs[0])
+            total_options = [PR for PR in bnf_grammar.production_rules[idx_NT]]
+
+            actual_options = []
+            for PR in bnf_grammar.production_rules[idx_NT]:
+                if PR[5] + depths[idx_branch] <= max_init_depth_:
+                    if PR[1] == 'terminal' \
+                            and is_valid_PR_reg(parse_tree, PR[0], eval_tree):
+                        actual_options.append(PR)
+                    if PR[1] == 'non-terminal':
+                        actual_options.append(PR)
+
+            recursive_options = [PR for PR in actual_options if PR[4]]
+
+            if len(actual_options) == 0:
+                # depth got exceeded, stop generation
+                phenotype = strip_unexpanded(phenotype)
+                remainders = remainders[:last_op_idx-1]
+                possible_choices = possible_choices[:last_op_idx-1]
+                invalid_flag = True
+                break
+
+            if len(recursive_options) > 0:
+                Ch = random.choice(recursive_options)
+            else:
+                Ch = random.choice(actual_options)
+            phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
+            parse_tree.grow(Ch[0])
+            depths[idx_branch] += 1
+            remainders.append(Ch[3])
+            cnt += 1
+            possible_choices.append(len(total_options))
+            if re.search(r'DIVIDE|PLUS|MINUS|MULTIPLY', Ch[0]):
+                last_op_idx = cnt
+
+            if Ch[2] > 1:
+                if idx_branch == 0:
+                    depths = [depths[idx_branch], ] * \
+                        Ch[2] + depths[idx_branch+1:]
+                else:
+                    depths = depths[0:idx_branch] + \
+                        [depths[idx_branch], ]*Ch[2] + depths[idx_branch+1:]
+                parse_tree.set_expansion_node(idx_branch)
+            if Ch[1] == 'terminal':
+                idx_branch += 1
+                parse_tree.set_expansion_node(idx_branch)
+
+            parse_tree.set_expansion_node(idx_branch)
+            remaining_NTs = [
+                '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+
+        del parse_tree
+        gc.collect()
+
+        # Generate the genome
+        genome = []
+        for j in range(len(remainders)):
+            codon = (random.randint(0, 1e10) % math.floor(
+                ((codon_size + 1) / possible_choices[j])) * possible_choices[j]) + remainders[j]
+            genome.append(codon)
+
+        # Include a tail with 50% of the genome's size
+        size_tail = int(0.5*len(genome))
+        for j in range(size_tail):
+            genome.append(random.randint(0, codon_size))
+
+        # Initialise the individual and include in the population
+        if invalid_flag:
+            ind = ind_class(genome, bnf_grammar, max_init_depth_,
+                            invalid_flag, phenotype, last_op_idx-1)
+            ind.structure = remainders
+        else:
+            ind = ind_class(genome, bnf_grammar, max_init_depth_, invalid_flag)
+
+        # Check if the individual was mapped correctly
+        if not invalid_flag:
+            if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:
+                raise Exception('error in the mapping')
+
+        population.append(ind)
+
+    return population
+
+
+def is_valid_PR_knapsack(curr_weight, bit, node_meta, node_pos, w_thres):
     return (curr_weight + (int(bit) * node_meta[f'{node_pos+1}']['weight'])) <= w_thres
 
 
@@ -531,7 +835,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
                 for PR in bnf_grammar.production_rules[idx_NT]:
                     if PR[5] + depths[idx_branch] <= max_init_depth_:
                         if PR[1] == 'terminal' \
-                            and is_valid_PR(
+                            and is_valid_PR_knapsack(
                                 curr_weight, PR[0],
                                 eval_tree.node_meta['meta'],
                                 idx_branch,
@@ -609,7 +913,7 @@ def sensible_initialisation_knapsack_AG(ind_class, pop_size, bnf_grammar, min_in
             for PR in bnf_grammar.production_rules[idx_NT]:
                 if PR[5] + depths[idx_branch] <= max_init_depth_:
                     if PR[1] == 'terminal' \
-                        and is_valid_PR(
+                        and is_valid_PR_knapsack(
                             curr_weight, PR[0],
                             eval_tree.node_meta['meta'],
                             idx_branch,
@@ -870,7 +1174,7 @@ def PI_Grow(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, co
     return population
 
 
-def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, codon_size, eval_tree):
+def PI_Grow_reg_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, codon_size, eval_tree):
 
     # Calculate the number of individuals to be generated with each depth
     n_sets = max_init_depth - min_init_depth + 1
@@ -907,6 +1211,8 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
             # Number of expansions used in each branch
             n_expansions = [0]*len(remaining_NTs)
 
+            cnt = 0
+            invalid_flag = False
             parse_tree = ParseTree(grammar=bnf_grammar,
                                    node_meta=eval_tree.node_meta)
             while len(remaining_NTs) != 0:
@@ -925,7 +1231,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                             for PR in bnf_grammar.production_rules[idx_NT]:
                                 if PR[5] + depths[k] <= max_init_depth_:
                                     if PR[1] == 'terminal' \
-                                            and is_valid_PR(
+                                            and is_valid_PR_knapsack(
                                             curr_weight, PR[0],
                                             eval_tree.node_meta['meta'],
                                             idx_branch,
@@ -950,7 +1256,7 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                         for PR in bnf_grammar.production_rules[idx_recursive]:
                             if PR[5] + depths[idx_branch] <= max_init_depth_ and PR[4]:
                                 if PR[1] == 'terminal' \
-                                            and is_valid_PR(
+                                            and is_valid_PR_knapsack(
                                             curr_weight, PR[0],
                                             eval_tree.node_meta['meta'],
                                             idx_branch,
@@ -1029,7 +1335,248 @@ def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_in
                     for PR in bnf_grammar.production_rules[idx_NT]:
                         if PR[5] + depths[idx_branch] <= max_init_depth_:
                             if PR[1] == 'terminal' \
-                                    and is_valid_PR(
+                                    and is_valid_PR_knapsack(
+                                    curr_weight, PR[0],
+                                    eval_tree.node_meta['meta'],
+                                    idx_branch,
+                                    eval_tree.w_threshold):
+                                actual_options.append(PR)
+                            if PR[1] == 'non-terminal':
+                                actual_options.append(PR)
+                    Ch = random.choice(actual_options)
+                    n_similar_NTs = remaining_NTs[:PI_index +
+                                                  1].count(remaining_NTs[PI_index])
+                    phenotype = replace_nth(
+                        phenotype, remaining_NTs[PI_index], Ch[0], n_similar_NTs)
+                    parse_tree.set_expansion_node(idx_branch)
+                    parse_tree.grow(Ch[0])
+                    new_NTs = ['<' + term +
+                               '>' for term in re.findall(r"\<(\w+)\>", Ch[0])]
+                    list_phenotype = list_phenotype[0:idx_branch] + \
+                        new_NTs + list_phenotype[idx_branch+1:]
+
+                    if remainders == []:
+                        remainders.append(Ch[3])
+                        possible_choices.append(len(total_options))
+                    else:
+                        remainder_position = sum(n_expansions[:idx_branch+1])
+                        remainders = remainders[:remainder_position] + \
+                            [Ch[3]] + remainders[remainder_position:]
+
+                        possible_choices = possible_choices[:remainder_position] + [
+                            len(total_options)] + possible_choices[remainder_position:]
+
+                    depths[idx_branch] += 1
+                    n_expansions[idx_branch] += 1
+
+                    if Ch[2] > 1:
+                        if idx_branch == 0:
+                            depths = [depths[idx_branch], ] * \
+                                Ch[2] + depths[idx_branch+1:]
+                        else:
+                            depths = depths[0:idx_branch] + \
+                                [depths[idx_branch], ]*Ch[2] + \
+                                depths[idx_branch+1:]
+                    if Ch[1] == 'terminal':
+                        branches[idx_branch] = True
+                    else:
+                        branches = branches[0:idx_branch] + \
+                            [False, ]*Ch[2] + branches[idx_branch+1:]
+                        n_expansions = n_expansions[0:idx_branch+1] + \
+                            [0, ]*(Ch[2]-1) + n_expansions[idx_branch+1:]
+
+                    remaining_NTs = [
+                        '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+
+            del parse_tree
+            gc.collect()
+
+            # Generate the genome
+            genome = []
+            for k in range(len(remainders)):
+                codon = (random.randint(0, 1e10) % math.floor(
+                    ((codon_size + 1) / possible_choices[k])) * possible_choices[k]) + remainders[k]
+                genome.append(codon)
+
+            # Include a tail with 50% of the genome's size
+            size_tail = int(0.5*len(genome))
+            for k in range(size_tail):
+                genome.append(random.randint(0, codon_size))
+
+            # Initialise the individual and include in the population
+            # TODO: test for knapsack mapper
+            ind = ind_class(genome, bnf_grammar, max_init_depth_, eval_tree)
+            # ind = ind_class(genome, bnf_grammar, max_init_depth_)
+
+            # Check if the individual was mapped correctly
+            if remainders != ind.structure or phenotype != ind.phenotype or max(depths) != ind.depth:
+                raise Exception('error in the mapping')
+
+            population.append(ind)
+
+    return population
+
+
+def PI_Grow_knapsack_AG(ind_class, pop_size, bnf_grammar, min_init_depth, max_init_depth, codon_size, eval_tree):
+
+    # Calculate the number of individuals to be generated with each depth
+    n_sets = max_init_depth - min_init_depth + 1
+    set_size = int(pop_size/n_sets)
+    # the size of the last set, to be initialised with a random max depth between min_init_depth and max_init_depth
+    remaining = pop_size % n_sets
+    n_sets += 1  # including the last set, which will have random init depth
+
+    # TODO check if it is possible to generate inds with max_init_depth and min_init_depth
+
+    population = []
+    for i in range(n_sets):
+        if i == n_sets - 1:
+            max_init_depth_ = random.randint(
+                min_init_depth, max_init_depth + 1)
+            set_size = remaining
+        else:
+            max_init_depth_ = min_init_depth + i
+
+        for j in range(set_size):
+
+            remainders = []  # it will register the choices
+            possible_choices = []  # it will register the respective possible choices
+
+            phenotype = bnf_grammar.start_rule
+            remaining_NTs = [
+                '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+            # it keeps in each position a terminal if the respective branch was terminated or a <NT> otherwise
+            list_phenotype = remaining_NTs
+            # it keeps the depth of each branch
+            depths = [1]*len(remaining_NTs)
+            # False if the respective branch was terminated. True, otherwise
+            branches = [False]*len(remaining_NTs)
+            # Number of expansions used in each branch
+            n_expansions = [0]*len(remaining_NTs)
+
+            parse_tree = ParseTree(grammar=bnf_grammar,
+                                   node_meta=eval_tree.node_meta)
+            while len(remaining_NTs) != 0:
+                choose_ = False
+                if max(depths) < max_init_depth_:
+                    # Count the number of NT with recursive options remaining
+                    NT_with_recursive_options = 0
+                    l = 0
+                    for k in range(len(branches)):
+                        if not branches[k]:
+                            idx_NT = bnf_grammar.non_terminals.index(
+                                remaining_NTs[l])
+                            curr_weight = eval_tree.tree_meta_data(
+                                parse_tree.tree)
+                            actual_options = []
+                            for PR in bnf_grammar.production_rules[idx_NT]:
+                                if PR[5] + depths[k] <= max_init_depth_:
+                                    if PR[1] == 'terminal' \
+                                            and is_valid_PR_knapsack(
+                                            curr_weight, PR[0],
+                                            eval_tree.node_meta['meta'],
+                                            idx_branch,
+                                            eval_tree.w_threshold):
+                                        actual_options.append(PR)
+                                    if PR[1] == 'non-terminal':
+                                        actual_options.append(PR)
+                            recursive_options = [
+                                PR for PR in actual_options if PR[4]]
+                            if len(recursive_options) > 0:
+                                NT_with_recursive_options += 1
+                                idx_recursive = idx_NT
+                                idx_branch = k
+                                PI_index = l
+                            if NT_with_recursive_options == 2:
+                                break
+                            l += 1
+                    if NT_with_recursive_options == 1:  # if there is just one NT with recursive options remaining, choose between them
+                        total_options = [
+                            PR for PR in bnf_grammar.production_rules[idx_recursive]]
+                        recursive_options = []
+                        for PR in bnf_grammar.production_rules[idx_recursive]:
+                            if PR[5] + depths[idx_branch] <= max_init_depth_ and PR[4]:
+                                if PR[1] == 'terminal' \
+                                            and is_valid_PR_knapsack(
+                                            curr_weight, PR[0],
+                                            eval_tree.node_meta['meta'],
+                                            idx_branch,
+                                            eval_tree.w_threshold):
+                                    recursive_options.append(PR)
+                                if PR[1] == 'non-terminal':
+                                    recursive_options.append(PR)
+
+                        Ch = random.choice(recursive_options)
+                        n_similar_NTs = remaining_NTs[:PI_index +
+                                                      1].count(remaining_NTs[PI_index])
+
+                        phenotype = replace_nth(
+                            phenotype, remaining_NTs[PI_index], Ch[0], n_similar_NTs)
+                        parse_tree.set_expansion_node(idx_branch)
+                        parse_tree.grow(Ch[0])
+                        new_NTs = [
+                            '<' + term + '>' for term in re.findall(r"\<(\w+)\>", Ch[0])]
+                        list_phenotype = list_phenotype[0:idx_branch] + \
+                            new_NTs + list_phenotype[idx_branch+1:]
+
+                        if remainders == []:
+                            remainders.append(Ch[3])
+                            possible_choices.append(len(total_options))
+                        else:
+                            remainder_position = sum(
+                                n_expansions[:idx_branch+1])
+                            remainders = remainders[:remainder_position] + \
+                                [Ch[3]] + remainders[remainder_position:]
+
+                            possible_choices = possible_choices[:remainder_position] + [
+                                len(total_options)] + possible_choices[remainder_position:]
+
+                        depths[idx_branch] += 1
+                        n_expansions[idx_branch] += 1
+
+                        if Ch[2] > 1:
+                            if idx_branch == 0:
+                                depths = [depths[idx_branch], ] * \
+                                    Ch[2] + depths[idx_branch+1:]
+                            else:
+                                depths = depths[0:idx_branch] + \
+                                    [depths[idx_branch], ]*Ch[2] + \
+                                    depths[idx_branch+1:]
+                        if Ch[1] == 'terminal':
+                            branches[idx_branch] = True
+                        else:
+                            branches = branches[0:idx_branch] + \
+                                [False, ]*Ch[2] + branches[idx_branch+1:]
+                            n_expansions = n_expansions[0:idx_branch+1] + \
+                                [0, ]*(Ch[2]-1) + n_expansions[idx_branch+1:]
+
+                        remaining_NTs = [
+                            '<' + term + '>' for term in re.findall(r"\<(\w+)\>", phenotype)]
+
+                    else:  # choose within any other branch
+                        choose_ = True
+                else:
+                    choose_ = True
+
+                if choose_:  # at least one branch has reached the max depth
+                    # index of the current branch being grown
+                    PI_index = random.choice(range(len(remaining_NTs)))
+                    count_ = 0
+                    for k in range(len(branches)):
+                        if not branches[k]:
+                            if count_ == PI_index:
+                                idx_branch = k
+                                break
+                            count_ += 1
+                    idx_NT = bnf_grammar.non_terminals.index(
+                        remaining_NTs[PI_index])
+                    total_options = [
+                        PR for PR in bnf_grammar.production_rules[idx_NT]]
+                    actual_options = []
+                    for PR in bnf_grammar.production_rules[idx_NT]:
+                        if PR[5] + depths[idx_branch] <= max_init_depth_:
+                            if PR[1] == 'terminal' \
+                                    and is_valid_PR_knapsack(
                                     curr_weight, PR[0],
                                     eval_tree.node_meta['meta'],
                                     idx_branch,

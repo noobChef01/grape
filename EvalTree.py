@@ -4,7 +4,7 @@ import json
 
 class EvalTree(object):
     '''
-    Base class for Tree Evaluation, which reads in the terminal node 
+    Base class for Tree Evaluation, which reads in the terminal node
     definitions specified in a json file.
     '''
 
@@ -18,7 +18,7 @@ class EvalTree(object):
 
 class EvalKnapSackTree(EvalTree):
     '''
-    Evaluate a knapsack Parse Tree consisting of 0 and 1 bits at the 
+    Evaluate a knapsack Parse Tree consisting of 0 and 1 bits at the
     terminals.'''
 
     def __init__(self, w_threshold, meta_file_path):
@@ -50,26 +50,120 @@ class EvalKnapSackTree(EvalTree):
 
 class EvalSymRegTree(EvalTree):
 
-    def __init__(self, meta_file_path):
+    def __init__(self, meta_file_path, bnf_grammar):
         super().__init__(meta_file_path)
-        # self.tree = tree
+        self.grammar = bnf_grammar
 
-    def visit(self, tree, node_id):
-        node = tree.get_node(node_id)
-        if node.tag == 'DIVIDE':
-            parent = self.tree.parent(node.identifier)
-            children = tree.children(parent.identifier)
-            for i, child in enumerate(children):
-                if child.identifier == node.identifier:
-                    tree.update_node(
-                        children[i+1].identifier, tag=children[i+1].tag + '+0.000001')
-        for child in tree.children(node_id):
-            self.visit(tree, child.identifier)
+    def reset(self, tree):
+        self.tree = tree
+        self.is_valid = True
+
+    def get_visitor_method(self, node_type):
+        return {
+            'operator': 'visit_op_node_T',
+            'decimal': 'visit_decimal_node_NT',
+            'constant': 'visit_constant_node_T',
+            'non_terminal': 'visit_NT',
+            'input': 'visit_input_T',
+            # 'epsilon': 'visit_epsilon_T'
+        }[node_type]
+
+    def set_method(self, node):
+        method_name = ''
+        if node.tag == '.':
+            method_name = self.get_visitor_method('decimal')
+        elif node.data.type == 'NT' or node.tag == 'op':
+            method_name = self.get_visitor_method('non_terminal')
+        elif node.data.name in self.grammar.terminals:
+            if node.data.meta['type'] == 'operator':
+                method_name = self.get_visitor_method('operator')
+            # elif node.data.meta['type'] == 'epsilon':
+            #     method_name = self.get_visitor_method('epsilon')
+            elif node.data.meta['type'] == 'constant':
+                method_name = self.get_visitor_method('constant')
+            else:
+                method_name = self.get_visitor_method('input')
+        return method_name
+
+    def visit(self, node):
+        method_name = self.set_method(node)
+        visitor = getattr(self, method_name, self.generic_visit)
+        return visitor(node)
+
+    def generic_visit(self, node):
+        raise Exception(
+            'No visit method defined for node: {}'.format(node.tag))
+
+    # def visit_epsilon_T(self, node):
+    #     return 1e-8
+
+    def visit_op_node_T(self, node):
+        if node.data.meta.get('op_value') == '-':
+            left, right = self.tree.children(node.identifier)
+            l_val = self.visit(left)
+            r_val = self.visit(right)
+            # if l_val == r_val:
+            #     self.is_valid = False
+            #     return None
+            try:
+                return l_val - r_val
+            except TypeError:
+                pass
+                # print("Nodes not fully expanded")
+
+        elif node.data.meta.get('op_value') == '+':
+            left, right = self.tree.children(node.identifier)
+            try:
+                return self.visit(left) + self.visit(right)
+            except TypeError:
+                pass
+                # print("Nodes not fully expanded")
+
+        elif node.data.meta.get('op_value') == '*':
+            left, right = self.tree.children(node.identifier)
+            try:
+                return self.visit(left) * self.visit(right)
+            except TypeError:
+                pass
+                # print("Nodes not fully expanded")
+
+        elif node.data.meta.get('op_value') == '/':
+            left, right = self.tree.children(node.identifier)
+            l_val = self.visit(left)
+            r_val = self.visit(right)
+            if r_val == 0:
+                self.is_valid = False
+                return None
+            try:
+                return l_val / r_val
+            except TypeError:
+                pass
+                # print("Nodes not fully expanded")
+
+    def visit_decimal_node_NT(self, node):
+        val = ''
+        for i, child in enumerate(self.tree.children(node.identifier)):
+            if i == 2:
+                val += '.'
+            val += str(self.visit(child))
+        try:
+            return float(val)
+        except ValueError:
+            pass
+            # print("Nodes not fully expanded")
+
+    def visit_constant_node_T(self, node):
+        return str(node.data.meta.get('value'))
+
+    def visit_input_T(self, node):
+        # TODO: read from X-train and use a random value
+        return 1
+
+    def visit_NT(self, node):
+        for child in self.tree.children(node.identifier):
+            self.visit(child)
 
     def evaluate(self, tree):
-        root_id = tree.root
-        return self.visit(tree, root_id)
-
-    # def tree_meta_data(self, tree):
-    #     self.evaluate(tree)
-    #     return self.curr_weight
+        self.reset(tree)
+        tree_val = self.visit(self.tree.get_node(tree.root))
+        return self.is_valid

@@ -47,15 +47,15 @@ class ParseTree():
         token_type = T_T if token_name in self.terminals else T_NT
         if self.type == 'knapsack' and token_type == T_T:
             # knapsack item numbering starts from 1
-            return Token(token_type, token_name.upper(), meta=self.node_meta.get(f'{self.branch_idx+1}'))
-        return Token(token_type, token_name.upper(), meta=self.node_meta.get(f'{token_name}'))
+            return Token(token_type, token_name, meta=self.node_meta.get(f'{self.branch_idx+1}'))
+        return Token(token_type, token_name, meta=self.node_meta.get(f'{token_name}'))
 
     def set_root(self):
         self.tree = Tree()
         root_name = self.strip(self.start_rule)
         rid = root_name + '_0_0'
         root_meta = self.get_token(root_name)
-        self.tree.create_node(root_name.upper(),
+        self.tree.create_node(root_name,
                               rid, data=root_meta)
         self.expandable_nodes.append([rid, 0])
         self.set_expansion_node(0)
@@ -76,11 +76,11 @@ class ParseTree():
                 return True, (i-1, i, i+1)
         return False, None
 
-    def increment_node_ids(self, expandable_nodes):
+    def increment_node_ids(self, expandable_nodes, n_added):
         result = []
         for node in expandable_nodes:
             old_id_split = node[0].split('_')
-            new_idx = int(old_id_split[-1])+2
+            new_idx = int(old_id_split[-1])+(n_added-1)
             new_id = '_'.join(old_id_split[:-1]) + "_" + str(new_idx)
             self.tree.update_node(node[0], identifier=new_id)
             result.append([new_id, new_idx])
@@ -90,15 +90,15 @@ class ParseTree():
         lvl = self.tree.level(self.to_expand)
         l_idx, op_idx, r_idx = indices
         left_node = Node(
-            tag=tokens[l_idx].upper(),
+            tag=tokens[l_idx],
             identifier=f'{tokens[l_idx]}_left_{lvl+2}_{self.branch_idx}',
             data=self.get_token(tokens[l_idx])
         )
-        op_tag = tokens[op_idx].upper()
+        op_tag = tokens[op_idx]
         op_identifier = f'{tokens[op_idx]}_{lvl+1}_{self.branch_idx+1}'
         op_data = self.get_token(tokens[op_idx])
         right_node = Node(
-            tag=tokens[r_idx].upper(),
+            tag=tokens[r_idx],
             identifier=f'{tokens[r_idx]}_right_{lvl+2}_{self.branch_idx+2}',
             data=self.get_token(tokens[r_idx])
         )
@@ -112,38 +112,62 @@ class ParseTree():
             + [[left_node.identifier, self.branch_idx],
                 [op_identifier, self.branch_idx+1],
                 [right_node.identifier, self.branch_idx+2]] \
-            + self.increment_node_ids(self.expandable_nodes[self.branch_idx+1:])
+            + self.increment_node_ids(self.expandable_nodes[self.branch_idx+1:], 3)
+
+    def contains_constant(self, tokens):
+        for token in tokens:
+            if token == '.':
+                return True
+        return False
 
     def grow(self, chosen_prod):
-        # TODO: fix to single constant node
         tokens = re.findall(
-            r"<\w+>|x\[\d+\]|{}".format('|'.join(self.terminals)), chosen_prod)
+            r"<\w+>|x\[\d+\]|\.|{}".format('|'.join(self.terminals)), chosen_prod)
         tokens = [self.strip(t) for t in tokens]
         flag, indices = self.has_binary_op(tokens)
         if flag:
             self.add_binary_operation(tokens, indices)
         elif len(tokens) > 1:
-            temp = []
-            for i, token in enumerate(tokens):
-                node_name = self.strip(tokens[0])
-                node_data = self.get_token(node_name)
+            if self.type != 'knapsack' and self.contains_constant(tokens):
                 lvl = self.tree.level(self.to_expand)
-                node_id = f'{node_name}_{lvl}_{i}'
-                self.tree.create_node(tag=node_name.upper(
-                ), identifier=node_id, data=node_data, parent=self.to_expand)
-                temp.append([node_id, i])
-            self.expandable_nodes = temp
-            self.set_expansion_node(0)
+                decimal_nid = f'._{lvl}_{self.branch_idx}'
+                self.tree.update_node(self.to_expand,
+                                      tag='.', identifier=decimal_nid)
+                temp = []
+                i = 0
+                for token in tokens:
+                    if token == '.':
+                        continue
+                    node_name = self.strip(token)
+                    node_data = self.get_token(node_name)
+                    lvl = self.tree.level(decimal_nid)
+                    node_id = f'{node_name}_{lvl+1}_{i}'
+                    self.tree.create_node(
+                        tag=node_name, identifier=node_id, data=node_data, parent=decimal_nid)
+                    temp.append([node_id, i])
+                    i += 1
+                self.expandable_nodes = self.expandable_nodes[:self.branch_idx] \
+                    + [[e_node[0], self.branch_idx+e_node[1]] for e_node in temp] \
+                    + self.increment_node_ids(self.expandable_nodes[self.branch_idx+1:], len(temp))
+            else:
+                temp = []
+                for i, token in enumerate(tokens):
+                    node_name = self.strip(token)
+                    node_data = self.get_token(node_name)
+                    lvl = self.tree.level(self.to_expand)
+                    node_id = f'{node_name}_{lvl}_{i}'
+                    self.tree.create_node(
+                        tag=node_name, identifier=node_id, data=node_data, parent=self.to_expand)
+                    temp.append([node_id, i])
+                self.expandable_nodes = temp
+                self.set_expansion_node(0)
         else:
             node_name = self.strip(tokens[0])
             node_data = self.get_token(node_name)
             lvl = self.tree.level(self.to_expand)
             new_id = f'{node_name}_{lvl}_{self.branch_idx}'
-            self.tree.update_node(self.to_expand, tag=node_name.upper(
-            ), identifier=new_id, data=node_data)
-            # if node_name in self.terminals:
-            # self.expandable_nodes = self.expandable_nodes[:self.branch_idx] + self.expandable_nodes[self.branch_idx+1:]
-            # else:
+            self.tree.update_node(
+                self.to_expand, tag=node_name, identifier=new_id, data=node_data)
             self.expandable_nodes[self.branch_idx] = [
                 new_id, self.branch_idx]
 

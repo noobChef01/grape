@@ -42,7 +42,7 @@ def varAnd(population, toolbox, cxpb, mutpb,
     # Apply crossover and mutation on the offspring
     for i in range(1, len(offspring), 2):
         if random.random() < cxpb:
-            if type == 'knapsack':
+            if type == 'knapsack' or type == 'regression':
                 offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
                                                               offspring[i],
                                                               bnf_grammar, max_tree_depth, eval_tree)
@@ -53,7 +53,7 @@ def varAnd(population, toolbox, cxpb, mutpb,
             del offspring[i - 1].fitness.values, offspring[i].fitness.values
 
     for i in range(len(offspring)):
-        if type == 'knapsack':
+        if type == 'knapsack' or type == 'regression':
             offspring[i], = toolbox.mutate(offspring[i], mutpb,
                                            codon_size, bnf_grammar, max_tree_depth, eval_tree)
         else:
@@ -113,7 +113,11 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
     for ind in population:
         if not ind.fitness.valid:
             invalid_ind = ind
-            ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
+            try:
+                ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
+            except:
+                ind.invalid = True
+                ind.fitness.values = (np.NaN, )
 
     invalid = 0
     list_structures = []
@@ -241,8 +245,11 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
         for ind in offspring:
             if not ind.fitness.valid:
                 invalid_ind = ind
-                ind.fitness.values = toolbox.evaluate(
-                    invalid_ind, points_train)
+                try:
+                    ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
+                except:
+                    ind.invalid = True
+                    ind.fitness.values = (np.NaN, )
 
         # Update population for next generation
         population[:] = offspring

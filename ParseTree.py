@@ -78,12 +78,12 @@ class ParseTree():
 
     def increment_node_ids(self, expandable_nodes, n_added):
         result = []
-        for node in expandable_nodes:
+        for node in expandable_nodes[::-1]:
             old_id_split = node[0].split('_')
             new_idx = int(old_id_split[-1])+(n_added-1)
             new_id = '_'.join(old_id_split[:-1]) + "_" + str(new_idx)
             self.tree.update_node(node[0], identifier=new_id)
-            result.append([new_id, new_idx])
+            result.insert(0, [new_id, new_idx])
         return result
 
     def add_binary_operation(self, tokens, indices):
@@ -91,15 +91,15 @@ class ParseTree():
         l_idx, op_idx, r_idx = indices
         left_node = Node(
             tag=tokens[l_idx],
-            identifier=f'{tokens[l_idx]}_left_{lvl+2}_{self.branch_idx}',
+            identifier=f'{tokens[l_idx]}_left_{lvl+1}_{self.branch_idx}',
             data=self.get_token(tokens[l_idx])
         )
         op_tag = tokens[op_idx]
-        op_identifier = f'{tokens[op_idx]}_{lvl+1}_{self.branch_idx+1}'
+        op_identifier = f'{tokens[op_idx]}_{lvl}_{self.branch_idx+1}'
         op_data = self.get_token(tokens[op_idx])
         right_node = Node(
             tag=tokens[r_idx],
-            identifier=f'{tokens[r_idx]}_right_{lvl+2}_{self.branch_idx+2}',
+            identifier=f'{tokens[r_idx]}_right_{lvl+1}_{self.branch_idx+2}',
             data=self.get_token(tokens[r_idx])
         )
         self.tree.update_node(self.to_expand, tag=op_tag,
@@ -131,9 +131,19 @@ class ParseTree():
             if self.type != 'knapsack' and self.contains_constant(tokens):
                 lvl = self.tree.level(self.to_expand)
                 decimal_nid = f'._{lvl}_{self.branch_idx}'
+                k = 0
+                
+                # tree contains a duplicate decimal node id, bypass it
+                while self.tree.contains(decimal_nid):
+                    decimal_nid = f'._{lvl}_{self.branch_idx+k}'
+                    k += 1
+                
                 self.tree.update_node(self.to_expand,
                                       tag='.', identifier=decimal_nid)
+                self.expandable_nodes[self.branch_idx] = [
+                    decimal_nid, self.branch_idx]
                 temp = []
+                buffer = []
                 i = 0
                 for token in tokens:
                     if token == '.':
@@ -141,21 +151,23 @@ class ParseTree():
                     node_name = self.strip(token)
                     node_data = self.get_token(node_name)
                     lvl = self.tree.level(decimal_nid)
-                    node_id = f'{node_name}_{lvl+1}_{i}'
-                    self.tree.create_node(
-                        tag=node_name, identifier=node_id, data=node_data, parent=decimal_nid)
-                    temp.append([node_id, i])
+                    node_id = f'{node_name}_{lvl+1}_{i+self.branch_idx}'
+                    buffer.append([node_name, node_id, node_data, decimal_nid])
+                    temp.append([node_id, i+self.branch_idx])
                     i += 1
                 self.expandable_nodes = self.expandable_nodes[:self.branch_idx] \
-                    + [[e_node[0], self.branch_idx+e_node[1]] for e_node in temp] \
+                    + temp \
                     + self.increment_node_ids(self.expandable_nodes[self.branch_idx+1:], len(temp))
+                for item in buffer:
+                    self.tree.create_node(
+                        tag=item[0], identifier=item[1], data=item[2], parent=item[3])
             else:
                 temp = []
                 for i, token in enumerate(tokens):
                     node_name = self.strip(token)
                     node_data = self.get_token(node_name)
                     lvl = self.tree.level(self.to_expand)
-                    node_id = f'{node_name}_{lvl}_{i}'
+                    node_id = f'{node_name}_{lvl+1}_{i}'
                     self.tree.create_node(
                         tag=node_name, identifier=node_id, data=node_data, parent=self.to_expand)
                     temp.append([node_id, i])

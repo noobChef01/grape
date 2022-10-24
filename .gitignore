@@ -1,0 +1,12 @@
+# ide settings
+.vscode
+
+# cache files
+__pycache__
+
+# virtual env
+myenv
+
+# ignore folders 
+tests
+experiments

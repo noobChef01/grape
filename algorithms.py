@@ -20,8 +20,9 @@ import time
 
 from deap import tools
 
+
 def varAnd(population, toolbox, cxpb, mutpb,
-           bnf_grammar, codon_size, max_tree_depth):
+           bnf_grammar, codon_size, max_tree_depth, type, eval_tree):
     """Part of an evolutionary algorithm applying only the variation part
     (crossover **and** mutation). The modified individuals have their
     fitness invalidated. The individuals are cloned so returned population is
@@ -41,22 +42,32 @@ def varAnd(population, toolbox, cxpb, mutpb,
     # Apply crossover and mutation on the offspring
     for i in range(1, len(offspring), 2):
         if random.random() < cxpb:
-            offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
-                                                          offspring[i],
-                                                          bnf_grammar, max_tree_depth)
+            if type == 'knapsack' or type == 'regression':
+                offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
+                                                              offspring[i],
+                                                              bnf_grammar, max_tree_depth, eval_tree)
+            else:
+                offspring[i - 1], offspring[i] = toolbox.mate(offspring[i - 1],
+                                                              offspring[i],
+                                                              bnf_grammar, max_tree_depth)
             del offspring[i - 1].fitness.values, offspring[i].fitness.values
 
     for i in range(len(offspring)):
-        offspring[i], = toolbox.mutate(offspring[i], mutpb,
-                                       codon_size, bnf_grammar, max_tree_depth)
+        if type == 'knapsack' or type == 'regression':
+            offspring[i], = toolbox.mutate(offspring[i], mutpb,
+                                           codon_size, bnf_grammar, max_tree_depth, eval_tree)
+        else:
+            offspring[i], = toolbox.mutate(offspring[i], mutpb,
+                                           codon_size, bnf_grammar, max_tree_depth)
         del offspring[i].fitness.values
 
     return offspring
 
-def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size, 
-                bnf_grammar, codon_size, max_tree_depth, 
-                points_train, points_test=None, stats=None, halloffame=None, 
-                verbose=__debug__):
+
+def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
+                           bnf_grammar, codon_size, max_tree_depth,
+                           points_train, points_test=None, stats=None, halloffame=None,
+                           verbose=__debug__, type=None, eval_tree=None):
     """This algorithm reproduce the simplest evolutionary algorithm as
     presented in chapter 7 of [Back2000]_, with some adaptations to run GE
     on GRAPE.
@@ -80,20 +91,34 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
     :returns: A class:`~deap.tools.Logbook` with the statistics of the
               evolution
     """
-    
+
     logbook = tools.Logbook()
     if points_test:
-        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        if points_train:
+            logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes',
+                                                                                     'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        else:
+            logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['fitness_test', 'best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes',
+                                                                                     'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'selection_time', 'generation_time']
     else:
-        logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        if points_train:
+            logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes', 'best_ind_depth',
+                                                                                     'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'fitness_diversity', 'selection_time', 'generation_time']
+        else:
+            logbook.header = ['gen', 'invalid'] + (stats.fields if stats else []) + ['best_ind_length', 'avg_length', 'best_ind_nodes', 'avg_nodes',
+                                                                                     'best_ind_depth', 'avg_depth', 'avg_used_codons', 'best_ind_used_codons', 'structural_diversity', 'selection_time', 'generation_time']
 
-    start_gen = time.time()        
+    start_gen = time.time()
     # Evaluate the individuals with an invalid fitness
     for ind in population:
         if not ind.fitness.valid:
             invalid_ind = ind
-            ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
-        
+            try:
+                ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
+            except:
+                ind.invalid = True
+                ind.fitness.values = (np.NaN, )
+
     invalid = 0
     list_structures = []
     list_fitnesses = []
@@ -103,102 +128,134 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
         else:
             list_structures.append(str(ind.structure))
             list_fitnesses.append(str(ind.fitness.values[0]))
-    unique_structures = np.unique(list_structures, return_counts=False)  
-    unique_fitnesses = np.unique(list_fitnesses, return_counts=False)  
-    
+    unique_structures = np.unique(list_structures, return_counts=False)
+    unique_fitnesses = np.unique(list_fitnesses, return_counts=False)
+
     structural_diversity = len(unique_structures)/len(population)
-    fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
-    
-    valid = [ind for ind in population if not math.isnan(ind.fitness.values[0])]
-    
+    if points_train:
+        fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1)
+
+    valid = [ind for ind in population if not math.isnan(
+        ind.fitness.values[0])]
+
     # Update the hall of fame with the generated individuals
     if halloffame is not None:
         halloffame.update(valid)
-    
+
     length = [len(ind.genome) for ind in valid]
     avg_length = sum(length)/len(length)
     best_ind_length = len(halloffame.items[0].genome)
-    
+
     nodes = [ind.nodes for ind in valid]
     best_ind_nodes = halloffame.items[0].nodes
     avg_nodes = sum(nodes)/len(nodes)
 
-    
     depth = [ind.depth for ind in valid]
     best_ind_depth = halloffame.items[0].depth
     avg_depth = sum(depth)/len(depth)
-    
+
     used_codons = [ind.used_codons for ind in valid]
     avg_used_codons = sum(used_codons)/len(used_codons)
     best_ind_used_codons = halloffame.items[0].used_codons
-    
+
     if not verbose:
         print("gen =", 0, ", Fitness =", halloffame.items[0].fitness.values)
-    
+
     end_gen = time.time()
     generation_time = end_gen-start_gen
-        
+
     selection_time = 0
-    
+
     if points_test:
         fitness_test = np.NaN
-    
+
     record = stats.compile(population) if stats else {}
-    if points_test: 
-        logbook.record(gen=0, invalid=invalid, **record, 
-                       fitness_test=fitness_test,
-                       best_ind_length=best_ind_length, avg_length=avg_length, 
-                       best_ind_nodes=best_ind_nodes,
-                       avg_nodes=avg_nodes,
-                       best_ind_depth=best_ind_depth,
-                       avg_depth=avg_depth,
-                       avg_used_codons=avg_used_codons,
-                       best_ind_used_codons=best_ind_used_codons,
-                       structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
-                       selection_time=selection_time, 
-                       generation_time=generation_time)
+    if points_test:
+        if points_train:
+            logbook.record(gen=0, invalid=invalid, **record,
+                           fitness_test=fitness_test,
+                           best_ind_length=best_ind_length, avg_length=avg_length,
+                           best_ind_nodes=best_ind_nodes,
+                           avg_nodes=avg_nodes,
+                           best_ind_depth=best_ind_depth,
+                           avg_depth=avg_depth,
+                           avg_used_codons=avg_used_codons,
+                           best_ind_used_codons=best_ind_used_codons,
+                           structural_diversity=structural_diversity,
+                           fitness_diversity=fitness_diversity,
+                           selection_time=selection_time,
+                           generation_time=generation_time)
+        else:
+            logbook.record(gen=0, invalid=invalid, **record,
+                           fitness_test=fitness_test,
+                           best_ind_length=best_ind_length, avg_length=avg_length,
+                           best_ind_nodes=best_ind_nodes,
+                           avg_nodes=avg_nodes,
+                           best_ind_depth=best_ind_depth,
+                           avg_depth=avg_depth,
+                           avg_used_codons=avg_used_codons,
+                           best_ind_used_codons=best_ind_used_codons,
+                           structural_diversity=structural_diversity,
+                           selection_time=selection_time,
+                           generation_time=generation_time)
     else:
-        logbook.record(gen=0, invalid=invalid, **record, 
-                       best_ind_length=best_ind_length, avg_length=avg_length, 
-                       best_ind_nodes=best_ind_nodes,
-                       avg_nodes=avg_nodes,
-                       best_ind_depth=best_ind_depth,
-                       avg_depth=avg_depth,
-                       avg_used_codons=avg_used_codons,
-                       best_ind_used_codons=best_ind_used_codons,
-                       structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
-                       selection_time=selection_time, 
-                       generation_time=generation_time)
+        if points_train:
+            logbook.record(gen=0, invalid=invalid, **record,
+                           best_ind_length=best_ind_length, avg_length=avg_length,
+                           best_ind_nodes=best_ind_nodes,
+                           avg_nodes=avg_nodes,
+                           best_ind_depth=best_ind_depth,
+                           avg_depth=avg_depth,
+                           avg_used_codons=avg_used_codons,
+                           best_ind_used_codons=best_ind_used_codons,
+                           structural_diversity=structural_diversity,
+                           fitness_diversity=fitness_diversity,
+                           selection_time=selection_time,
+                           generation_time=generation_time)
+        else:
+            logbook.record(gen=0, invalid=invalid, **record,
+                           best_ind_length=best_ind_length, avg_length=avg_length,
+                           best_ind_nodes=best_ind_nodes,
+                           avg_nodes=avg_nodes,
+                           best_ind_depth=best_ind_depth,
+                           avg_depth=avg_depth,
+                           avg_used_codons=avg_used_codons,
+                           best_ind_used_codons=best_ind_used_codons,
+                           structural_diversity=structural_diversity,
+                           selection_time=selection_time,
+                           generation_time=generation_time)
     if verbose:
         print(logbook.stream)
 
     # Begin the generational process
     for gen in range(logbook.select("gen")[-1]+1, ngen + 1):
-        start_gen = time.time()    
-    
+        start_gen = time.time()
+
         # Select the next generation individuals
-        start = time.time()    
+        start = time.time()
         offspring = toolbox.select(population, len(population)-elite_size)
         end = time.time()
         selection_time = end-start
 
         # Vary the pool of individuals
         offspring = varAnd(offspring, toolbox, cxpb, mutpb,
-                           bnf_grammar, codon_size, max_tree_depth)
+                           bnf_grammar, codon_size, max_tree_depth, type, eval_tree)
 
         # Evaluate the individuals with an invalid fitness
         for ind in offspring:
             if not ind.fitness.valid:
                 invalid_ind = ind
-                ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
-                
-        #Update population for next generation
+                try:
+                    ind.fitness.values = toolbox.evaluate(invalid_ind, points_train)
+                except:
+                    ind.invalid = True
+                    ind.fitness.values = (np.NaN, )
+
+        # Update population for next generation
         population[:] = offspring
         for i in range(len(halloffame)):
             population.append(halloffame.items[i])
-            
+
         invalid = 0
         list_structures = []
         list_fitnesses = []
@@ -208,77 +265,108 @@ def ge_eaSimpleWithElitism(population, toolbox, cxpb, mutpb, ngen, elite_size,
             else:
                 list_structures.append(str(ind.structure))
                 list_fitnesses.append(str(ind.fitness.values[0]))
-                
-        unique_structures = np.unique(list_structures, return_counts=False)  
-        unique_fitnesses = np.unique(list_fitnesses, return_counts=False)  
-        
+
+        unique_structures = np.unique(list_structures, return_counts=False)
+        unique_fitnesses = np.unique(list_fitnesses, return_counts=False)
+
         structural_diversity = len(unique_structures)/len(population)
-        fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1) #TODO generalise for other problems, because it only works if the fitness is proportional to the number of testcases correctly predicted
-            
-        valid = [ind for ind in population if not math.isnan(ind.fitness.values[0])]
-        
+        if points_train:
+            fitness_diversity = len(unique_fitnesses)/(len(points_train[1])+1)
+
+        valid = [ind for ind in population if not math.isnan(
+            ind.fitness.values[0])]
+
         # Update the hall of fame with the generated individuals
         if halloffame is not None:
             halloffame.update(valid)
-            
+
         length = [len(ind.genome) for ind in valid]
         avg_length = sum(length)/len(length)
         best_ind_length = len(halloffame.items[0].genome)
-        
+
         nodes = [ind.nodes for ind in valid]
         best_ind_nodes = halloffame.items[0].nodes
         avg_nodes = sum(nodes)/len(nodes)
-        
+
         depth = [ind.depth for ind in valid]
         best_ind_depth = halloffame.items[0].depth
         avg_depth = sum(depth)/len(depth)
-        
+
         used_codons = [ind.used_codons for ind in valid]
         avg_used_codons = sum(used_codons)/len(used_codons)
         best_ind_used_codons = halloffame.items[0].used_codons
-        
+
         if not verbose:
-            print("gen =", gen, ", Fitness =", halloffame.items[0].fitness.values)
-        
+            print("gen =", gen, ", Fitness =",
+                  halloffame.items[0].fitness.values)
+
         if points_test:
             if gen < ngen:
                 fitness_test = np.NaN
             else:
-                fitness_test = toolbox.evaluate(halloffame.items[0], points_test)[0]
+                fitness_test = toolbox.evaluate(
+                    halloffame.items[0], points_test)[0]
 
         end_gen = time.time()
         generation_time = end_gen-start_gen
-        
+
         # Append the current generation statistics to the logbook
         record = stats.compile(population) if stats else {}
-        if points_test: 
-            logbook.record(gen=gen, invalid=invalid, **record, 
-                       fitness_test=fitness_test,
-                       best_ind_length=best_ind_length, avg_length=avg_length, 
-                       best_ind_nodes=best_ind_nodes,
-                       avg_nodes=avg_nodes,
-                       best_ind_depth=best_ind_depth,
-                       avg_depth=avg_depth,
-                       avg_used_codons=avg_used_codons,
-                       best_ind_used_codons=best_ind_used_codons,
-                       structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
-                       selection_time=selection_time, 
-                       generation_time=generation_time)
+        if points_test:
+            if points_train:
+                logbook.record(gen=gen, invalid=invalid, **record,
+                               fitness_test=fitness_test,
+                               best_ind_length=best_ind_length, avg_length=avg_length,
+                               best_ind_nodes=best_ind_nodes,
+                               avg_nodes=avg_nodes,
+                               best_ind_depth=best_ind_depth,
+                               avg_depth=avg_depth,
+                               avg_used_codons=avg_used_codons,
+                               best_ind_used_codons=best_ind_used_codons,
+                               structural_diversity=structural_diversity,
+                               fitness_diversity=fitness_diversity,
+                               selection_time=selection_time,
+                               generation_time=generation_time)
+            else:
+                logbook.record(gen=gen, invalid=invalid, **record,
+                               fitness_test=fitness_test,
+                               best_ind_length=best_ind_length, avg_length=avg_length,
+                               best_ind_nodes=best_ind_nodes,
+                               avg_nodes=avg_nodes,
+                               best_ind_depth=best_ind_depth,
+                               avg_depth=avg_depth,
+                               avg_used_codons=avg_used_codons,
+                               best_ind_used_codons=best_ind_used_codons,
+                               structural_diversity=structural_diversity,
+                               selection_time=selection_time,
+                               generation_time=generation_time)
         else:
-            logbook.record(gen=gen, invalid=invalid, **record, 
-                       best_ind_length=best_ind_length, avg_length=avg_length, 
-                       best_ind_nodes=best_ind_nodes,
-                       avg_nodes=avg_nodes,
-                       best_ind_depth=best_ind_depth,
-                       avg_depth=avg_depth,
-                       avg_used_codons=avg_used_codons,
-                       best_ind_used_codons=best_ind_used_codons,
-                       structural_diversity=structural_diversity,
-                       fitness_diversity=fitness_diversity,
-                       selection_time=selection_time, 
-                       generation_time=generation_time)
-                
+            if points_train:
+                logbook.record(gen=gen, invalid=invalid, **record,
+                               best_ind_length=best_ind_length, avg_length=avg_length,
+                               best_ind_nodes=best_ind_nodes,
+                               avg_nodes=avg_nodes,
+                               best_ind_depth=best_ind_depth,
+                               avg_depth=avg_depth,
+                               avg_used_codons=avg_used_codons,
+                               best_ind_used_codons=best_ind_used_codons,
+                               structural_diversity=structural_diversity,
+                               fitness_diversity=fitness_diversity,
+                               selection_time=selection_time,
+                               generation_time=generation_time)
+            else:
+                logbook.record(gen=gen, invalid=invalid, **record,
+                               best_ind_length=best_ind_length, avg_length=avg_length,
+                               best_ind_nodes=best_ind_nodes,
+                               avg_nodes=avg_nodes,
+                               best_ind_depth=best_ind_depth,
+                               avg_depth=avg_depth,
+                               avg_used_codons=avg_used_codons,
+                               best_ind_used_codons=best_ind_used_codons,
+                               structural_diversity=structural_diversity,
+                               selection_time=selection_time,
+                               generation_time=generation_time)
+
         if verbose:
             print(logbook.stream)
 

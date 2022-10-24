@@ -1,0 +1,111 @@
+{
+    "type": "regression",
+    "meta": {
+        "DIVIDE": {
+            "type": "operator",
+            "arity": 2,
+            "op_value": "/"
+        },
+        "MINUS": {
+            "type": "operator",
+            "arity": 2,
+            "op_value": "-"
+        },
+        "PLUS": {
+            "type": "operator",
+            "arity": 2,
+            "op_value": "+"
+        },
+        "MULTIPLY": {
+            "type": "operator",
+            "arity": 2,
+            "op_value": "*"
+        },
+        "op": {
+            "type": "operator",
+            "arity": 2
+        },
+        "0": {
+            "type": "constant",
+            "arity": 0,
+            "value": 0
+        },
+        "1": {
+            "type": "constant",
+            "arity": 0,
+            "value": 1
+        },
+        "2": {
+            "type": "constant",
+            "arity": 0,
+            "value": 2
+        },
+        "3": {
+            "type": "constant",
+            "arity": 0,
+            "value": 3
+        },
+        "4": {
+            "type": "constant",
+            "arity": 0,
+            "value": 4
+        },
+        "5": {
+            "type": "constant",
+            "arity": 0,
+            "value": 5
+        },
+        "6": {
+            "type": "constant",
+            "arity": 0,
+            "value": 6
+        },
+        "7": {
+            "type": "constant",
+            "arity": 0,
+            "value": 7
+        },
+        "8": {
+            "type": "constant",
+            "arity": 0,
+            "value": 8
+        },
+        "9": {
+            "type": "constant",
+            "arity": 0,
+            "value": 9
+        }, 
+        "x[0]": 
+        {
+            "type": "input",
+            "arity": 0,
+            "value": 1
+        },
+        "x[1]": 
+        {
+            "type": "input",
+            "arity": 0,
+            "value": 1
+        },
+        "np.sin(e)":
+        {
+            "type": "function",
+            "arity": 1
+        },
+        "np.tanh(e)":
+        {
+            "type": "function",
+            "arity": 1
+        },
+        "np.sqrt(e)":
+        {
+            "type": "function",
+            "arity": 1
+        },
+        "np.log(e)":
+        {
+            "type": "function",
+            "arity": 1
+        }
+    }
+}

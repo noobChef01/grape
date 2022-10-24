@@ -1,0 +1,125 @@
+{
+    "type": "knapsack",
+    "meta": {
+        "1": {
+            "value": 46,
+            "weight": 57
+        },
+        "2": {
+            "value": 43,
+            "weight": 81
+        },
+        "3": {
+            "value": 30,
+            "weight": 79
+        },
+        "4": {
+            "value": 11,
+            "weight": 41
+        },
+        "5": {
+            "value": 7,
+            "weight": 17
+        },
+        "6": {
+            "value": 22,
+            "weight": 19
+        },
+        "7": {
+            "value": 6,
+            "weight": 85
+        },
+        "8": {
+            "value": 42,
+            "weight": 50
+        },
+        "9": {
+            "value": 22,
+            "weight": 42
+        },
+        "10": {
+            "value": 38,
+            "weight": 59
+        },
+        "11": {
+            "value": 41,
+            "weight": 46
+        },
+        "12": {
+            "value": 26,
+            "weight": 67
+        },
+        "13": {
+            "value": 17,
+            "weight": 58
+        },
+        "14": {
+            "value": 47,
+            "weight": 98
+        },
+        "15": {
+            "value": 31,
+            "weight": 33
+        },
+        "16": {
+            "value": 20,
+            "weight": 27
+        },
+        "17": {
+            "value": 40,
+            "weight": 74
+        },
+        "18": {
+            "value": 29,
+            "weight": 55
+        },
+        "19": {
+            "value": 17,
+            "weight": 28
+        },
+        "20": {
+            "value": 22,
+            "weight": 78
+        },
+        "21": {
+            "value": 11,
+            "weight": 73
+        },
+        "22": {
+            "value": 46,
+            "weight": 58
+        },
+        "23": {
+            "value": 3,
+            "weight": 84
+        },
+        "24": {
+            "value": 39,
+            "weight": 17
+        },
+        "25": {
+            "value": 5,
+            "weight": 71
+        },
+        "26": {
+            "value": 5,
+            "weight": 10
+        },
+        "27": {
+            "value": 39,
+            "weight": 19
+        },
+        "28": {
+            "value": 29,
+            "weight": 1
+        },
+        "29": {
+            "value": 43,
+            "weight": 45
+        },
+        "30": {
+            "value": 31,
+            "weight": 67
+        }
+    }
+}

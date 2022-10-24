@@ -705,6 +705,7 @@ def sensible_initialisation_reg_AG(ind_class, pop_size, bnf_grammar, min_init_de
                 Ch = random.choice(actual_options)
                 phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
                 parse_tree.grow(Ch[0])
+                # parse_tree.display()
                 depths[idx_branch] += 1
                 remainders.append(Ch[3])
                 cnt += 1
@@ -803,6 +804,7 @@ def sensible_initialisation_reg_AG(ind_class, pop_size, bnf_grammar, min_init_de
 
             phenotype = phenotype.replace(remaining_NTs[0], Ch[0], 1)
             parse_tree.grow(Ch[0])
+            # parse_tree.display()
             depths[idx_branch] += 1
             remainders.append(Ch[3])
             cnt += 1

@@ -1,5 +1,6 @@
 import re
 import json
+import numpy as np
 
 
 class EvalTree(object):
@@ -65,20 +66,30 @@ class EvalSymRegTree(EvalTree):
             'constant': 'visit_constant_node_T',
             'non_terminal': 'visit_NT',
             'input': 'visit_input_T',
-            # 'epsilon': 'visit_epsilon_T'
+            'sin_func': 'visit_sin',
+            'tanh_func': 'visit_tanh',
+            'log_func': 'visit_log',
+            'sqrt_func': 'visit_sqrt',
         }[node_type]
 
     def set_method(self, node):
         method_name = ''
         if node.tag == '.':
             method_name = self.get_visitor_method('decimal')
+        elif node.data.meta and node.data.meta.get('type') == 'function':
+            if node.tag.find('sin') != -1:
+                method_name = self.get_visitor_method('sin_func')
+            elif node.tag.find('tanh') != -1:
+                method_name = self.get_visitor_method('tanh_func')
+            elif node.tag.find('sqrt') != -1:
+                method_name = self.get_visitor_method('sqrt_func')
+            elif node.tag.find('log') != -1:
+                method_name = self.get_visitor_method('log_func')
         elif node.data.type == 'NT' or node.tag == 'op':
             method_name = self.get_visitor_method('non_terminal')
         elif node.data.name in self.grammar.terminals:
             if node.data.meta['type'] == 'operator':
                 method_name = self.get_visitor_method('operator')
-            # elif node.data.meta['type'] == 'epsilon':
-            #     method_name = self.get_visitor_method('epsilon')
             elif node.data.meta['type'] == 'constant':
                 method_name = self.get_visitor_method('constant')
             else:
@@ -93,9 +104,6 @@ class EvalSymRegTree(EvalTree):
     def generic_visit(self, node):
         raise Exception(
             'No visit method defined for node: {}'.format(node.tag))
-
-    # def visit_epsilon_T(self, node):
-    #     return 1e-8
 
     def visit_op_node_T(self, node):
         if node.data.meta.get('op_value') == '-':
@@ -139,6 +147,38 @@ class EvalSymRegTree(EvalTree):
             except TypeError:
                 pass
                 # print("Nodes not fully expanded")
+
+    def visit_log(self, node):
+        child_value  = self.visit(self.tree.children(node.identifier)[0])
+        if child_value  and child_value < 0:
+            self.is_valid = False
+            return None
+        try:
+            return np.log(child_value)
+        except TypeError:
+            pass
+
+    def visit_sqrt(self, node):
+        child_value  = self.visit(self.tree.children(node.identifier)[0])
+        if child_value and child_value < 0:
+            self.is_valid = False
+            return None
+        try:
+            return np.sqrt(child_value)
+        except TypeError:
+            pass
+
+    def visit_sin(self, node):
+        try:
+            return np.sin(self.visit(self.tree.children(node.identifier)[0]))
+        except TypeError:
+            pass
+
+    def visit_tanh(self, node):
+        try:
+            return np.tanh(self.visit(self.tree.children(node.identifier)[0]))
+        except TypeError:
+            pass
 
     def visit_decimal_node_NT(self, node):
         val = ''

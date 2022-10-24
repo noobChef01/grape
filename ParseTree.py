@@ -6,7 +6,6 @@ from treelib import Tree, Node
 T_NT = 'NT'
 T_T = 'T'
 
-
 class Token(object):
 
     def __init__(self, type, name, meta=None) -> None:
@@ -88,6 +87,8 @@ class ParseTree():
 
     def add_binary_operation(self, tokens, indices):
         lvl = self.tree.level(self.to_expand)
+        if self.is_func(self.to_expand):
+            lvl = lvl + 1
         l_idx, op_idx, r_idx = indices
         left_node = Node(
             tag=tokens[l_idx],
@@ -102,9 +103,14 @@ class ParseTree():
             identifier=f'{tokens[r_idx]}_right_{lvl+1}_{self.branch_idx+2}',
             data=self.get_token(tokens[r_idx])
         )
-        self.tree.update_node(self.to_expand, tag=op_tag,
-                              identifier=op_identifier,
-                              data=op_data)
+        if self.is_func(self.to_expand):
+            self.tree.create_node(parent=self.to_expand, tag=op_tag,
+                                  identifier=op_identifier,
+                                  data=op_data)
+        else:
+            self.tree.update_node(self.to_expand, tag=op_tag,
+                                  identifier=op_identifier,
+                                  data=op_data)
         self.tree.add_node(left_node, parent=op_identifier)
         self.tree.add_node(right_node, parent=op_identifier)
 
@@ -120,9 +126,15 @@ class ParseTree():
                 return True
         return False
 
+    def is_func(self, node_id):
+        flag = False
+        if node_id.split('_')[0].startswith('np.'):
+            flag = True
+        return flag
+
     def grow(self, chosen_prod):
         tokens = re.findall(
-            r"<\w+>|x\[\d+\]|\.|{}".format('|'.join(self.terminals)), chosen_prod)
+            r"np\.sqrt\(<e>\)|np\.log\(<e>\)|np\.tanh\(<e>\)|np\.sin\(<e>\)|<\w+>|x\[\d+\]|\.|{}".format('|'.join(self.terminals)), chosen_prod)
         tokens = [self.strip(t) for t in tokens]
         flag, indices = self.has_binary_op(tokens)
         if flag:
@@ -132,14 +144,20 @@ class ParseTree():
                 lvl = self.tree.level(self.to_expand)
                 decimal_nid = f'._{lvl}_{self.branch_idx}'
                 k = 0
-                
+
                 # tree contains a duplicate decimal node id, bypass it
                 while self.tree.contains(decimal_nid):
                     decimal_nid = f'._{lvl}_{self.branch_idx+k}'
                     k += 1
-                
-                self.tree.update_node(self.to_expand,
-                                      tag='.', identifier=decimal_nid)
+                if self.is_func(self.to_expand):
+                    id_split = decimal_nid.split("_")
+                    decimal_nid = "_".join(
+                        [id_split[0], str(int(id_split[1])+1), id_split[2]])
+                    self.tree.create_node(parent=self.to_expand,
+                                          tag='.', identifier=decimal_nid)
+                else:
+                    self.tree.update_node(self.to_expand,
+                                          tag='.', identifier=decimal_nid)
                 self.expandable_nodes[self.branch_idx] = [
                     decimal_nid, self.branch_idx]
                 temp = []
@@ -174,14 +192,24 @@ class ParseTree():
                 self.expandable_nodes = temp
                 self.set_expansion_node(0)
         else:
-            node_name = self.strip(tokens[0])
-            node_data = self.get_token(node_name)
-            lvl = self.tree.level(self.to_expand)
-            new_id = f'{node_name}_{lvl}_{self.branch_idx}'
-            self.tree.update_node(
-                self.to_expand, tag=node_name, identifier=new_id, data=node_data)
-            self.expandable_nodes[self.branch_idx] = [
-                new_id, self.branch_idx]
+            if self.is_func(self.to_expand):
+                node_name = self.strip(tokens[0])
+                node_data = self.get_token(node_name)
+                lvl = self.tree.level(self.to_expand)
+                new_id = f'{node_name}_{lvl+1}_{self.branch_idx}'
+                self.tree.create_node(
+                    parent=self.to_expand, tag=node_name, identifier=new_id, data=node_data)
+                self.expandable_nodes[self.branch_idx] = [
+                    new_id, self.branch_idx]
+            else:
+                node_name = self.strip(tokens[0])
+                node_data = self.get_token(node_name)
+                lvl = self.tree.level(self.to_expand)
+                new_id = f'{node_name}_{lvl}_{self.branch_idx}'
+                self.tree.update_node(
+                    self.to_expand, tag=node_name, identifier=new_id, data=node_data)
+                self.expandable_nodes[self.branch_idx] = [
+                    new_id, self.branch_idx]
 
     def set_expansion_node(self, idx):
         if idx <= len(self.expandable_nodes)-1:
